@@ -38,6 +38,9 @@ pub fn run_file(filename: String) -> MainType(a) {
   }
 }
 
-pub fn run(code: String) -> MainType(a) {
-  Ok(scanner.scan_tokens(code))
+pub fn run(source: String) -> MainType(a) {
+  source
+  |> scanner.scan_tokens()
+  |> io.debug()
+  |> Ok()
 }
