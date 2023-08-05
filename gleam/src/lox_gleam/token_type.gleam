@@ -35,7 +35,7 @@ pub type TokenType {
   For
   Fun
   If
-  Nil
+  LoxNil
   Or
   Print
   Return
