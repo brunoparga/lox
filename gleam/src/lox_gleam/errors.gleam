@@ -3,5 +3,6 @@
 pub type LoxGleamError {
   ErlangError
   ScanUnexpectedCharacterError
+  ScanUnexpectedEOFError
   TooManyArgumentsError
 }

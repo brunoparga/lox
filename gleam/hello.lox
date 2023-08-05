@@ -1,1 +1,4 @@
-)==(>{<=.*
+/!)==
+  // This comment and the whitespace before it are ignored
+>{<=
+//

@@ -36,7 +36,7 @@ fn do_scan_tokens(source, tokens, line) -> ScannerType(a) {
 /// what changes, besides the `TokenType`, is also the text that goes into the Token struct.
 fn scan_regular_tokens(source, tokens, line) -> ScannerType(a) {
   let assert Ok(char) = string.first(source)
-  let result = case char {
+  case char {
     // Easy one-character tokens
     "(" -> add_token(source, LeftParen, char, tokens, line)
     ")" -> add_token(source, RightParen, char, tokens, line)
@@ -50,23 +50,23 @@ fn scan_regular_tokens(source, tokens, line) -> ScannerType(a) {
     "*" -> add_token(source, Star, char, tokens, line)
 
     // Chars that might have equals after them
-    "!" | "=" | "<" | ">" -> maybe_equals(source, char, tokens, line)
+    "!" | "=" | "<" | ">" ->
+      maybe_equals(advance_one(source), char, tokens, line)
+
+    // Slashes, comments and whitespace
+    "/" -> maybe_comment(advance_one(source), tokens, line)
+    " " | "\r" | "\t" -> do_scan_tokens(advance_one(source), tokens, line)
+    "\n" -> do_scan_tokens(advance_one(source), tokens, line + 1)
     // We shouldn't hit this case.
     _ -> Error(errors.ScanUnexpectedCharacterError)
-  }
-  case result {
-    Ok(#(new_source, new_tokens)) ->
-      do_scan_tokens(new_source, new_tokens, line)
-    Error(reason) -> Error(reason)
   }
 }
 
 fn maybe_equals(source, char, tokens, line) {
-  let tmp_source = string.drop_left(source, 1)
-  case string.first(tmp_source) {
+  case string.first(source) {
     Ok("=") -> yes_equals(source, char, tokens, line)
     Ok(_) -> no_equals(source, char, tokens, line)
-    Error(_reason) -> Error(errors.ScanUnexpectedCharacterError)
+    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
   }
 }
 
@@ -89,6 +89,22 @@ fn yes_equals(source, char, tokens, line) {
   }
 }
 
+fn maybe_comment(source, tokens, line) {
+  case string.first(source) {
+    Ok("/") -> scan_comment(source, tokens, line)
+    Ok(_) -> add_token(source, Slash, "/", tokens, line)
+    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+  }
+}
+
+fn scan_comment(source, tokens, line) {
+  case string.split_once(source, "\n") {
+    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line + 1)
+    // This means a comment in the last line of the file
+    Error(_reason) -> do_scan_tokens("\n", tokens, line)
+  }
+}
+
 /// This function's job is *ONLY* to obtain a new list of tokens, including the one currently being
 /// worked on, as well as a new tail of the source code string, without the characters responsible
 /// for that particular token.
@@ -96,7 +112,7 @@ fn add_token(source, token_type, text, tokens, line) {
   let assert Ok(new_tokens) =
     do_add_token(token_type, text, tokens, option.None, line)
   let new_source = string.drop_left(source, string.length(text))
-  Ok(#(new_source, new_tokens))
+  do_scan_tokens(new_source, new_tokens, line)
 }
 
 /// This function's job is *ONLY* to receive information needed to build a token, plus an existing
@@ -105,4 +121,8 @@ fn do_add_token(token_type, text, tokens, literal, line) {
   let token =
     Token(token_type: token_type, lexeme: text, literal: literal, line: line)
   Ok([token, ..tokens])
+}
+
+fn advance_one(source) {
+  string.drop_left(source, 1)
 }
