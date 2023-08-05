@@ -11,30 +11,18 @@ import lox_gleam/token_type.{
 }
 
 pub fn scan_tokens(source) -> List(Token(a)) {
-  let source_length = string.length(source)
-  let reversed_tokens = do_scan_tokens(source, [], 1, source_length)
+  let reversed_tokens = do_scan_tokens(source, [], 1)
   list.reverse(reversed_tokens)
 }
 
-fn do_scan_tokens(
-  source,
-  tokens,
-  line,
-  source_length,
-) -> List(Token(a)) {
+fn do_scan_tokens(source, tokens, line) -> List(Token(a)) {
   case source == "\n" {
     True -> do_add_token(Eof, "", tokens, option.None, line)
-    False ->
-      scan_regular_tokens(source, tokens, line, source_length)
+    False -> scan_regular_tokens(source, tokens, line)
   }
 }
 
-fn scan_regular_tokens(
-  source,
-  tokens,
-  line,
-  source_length,
-) -> List(Token(a)) {
+fn scan_regular_tokens(source, tokens, line) -> List(Token(a)) {
   let assert Ok(char) = string.first(source)
   let #(new_source, new_tokens) = case char {
     "(" -> add_token(source, LeftParen, tokens, line)
@@ -50,19 +38,13 @@ fn scan_regular_tokens(
     // We shouldn't hit this case.
     _ -> #("", [])
   }
-  do_scan_tokens(
-    new_source,
-    new_tokens,
-    line,
-    source_length,
-  )
+  do_scan_tokens(new_source, new_tokens, line)
 }
 
 fn add_token(source, token_type, tokens, line) {
-  let token_length = 1
-  let text = string.slice(from: source, at_index: 0, length: token_length)
+  let text = string.slice(from: source, at_index: 0, length: 1)
   let new_tokens = do_add_token(token_type, text, tokens, option.None, line)
-  let new_source = string.drop_left(source, token_length)
+  let new_source = string.drop_left(source, 1)
   #(new_source, new_tokens)
 }
 
