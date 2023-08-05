@@ -4,9 +4,10 @@ import gleam/io
 import gleam/string
 import lox_gleam/scanner
 import lox_gleam/token
+import lox_gleam/errors
 
 type MainType(a) =
-  Result(List(token.Token(a)), Nil)
+  Result(List(token.Token(a)), errors.LoxGleamError)
 
 pub fn main() {
   case erlang.start_arguments() {
@@ -14,7 +15,7 @@ pub fn main() {
     [filename] -> run_file(filename)
     _ -> {
       io.println_error("Usage: gleam run -- [script]")
-      Error(Nil)
+      Error(errors.TooManyArgumentsError)
     }
   }
 }
@@ -33,14 +34,12 @@ pub fn run_file(filename: String) -> MainType(a) {
       |> string.inspect()
       |> io.println_error()
 
-      Error(Nil)
+      Error(errors.ErlangError)
     }
   }
 }
 
 pub fn run(source: String) -> MainType(a) {
-  source
-  |> scanner.scan_tokens()
+  scanner.scan_tokens(source)
   |> io.debug()
-  |> Ok()
 }
