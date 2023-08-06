@@ -1,8 +1,8 @@
 //// Expose scan_tokens, which takes in a string representing Lox source code (whether from a file
 //// or typed into the REPL) and returns, hopefully, a list of tokens for that program.
 
+import gleam/dynamic
 import gleam/list
-import gleam/option
 import gleam/regex
 import gleam/string
 import lox_gleam/errors
@@ -40,10 +40,11 @@ fn scan_regular_tokens(source, tokens, line) {
       add_simple_token(advance_one(source), tokens, line, char)
 
     // Chars that might have equals after them
-    "!" | "=" | "<" | ">" -> maybe_equals(source, char, tokens, line)
+    "!" | "=" | "<" | ">" ->
+      maybe_equals(advance_one(source), char, tokens, line)
 
     // Slashes, comments and whitespace
-    "/" -> maybe_comment(source, tokens, line)
+    "/" -> maybe_comment(advance_one(source), tokens, line)
     " " | "\r" | "\t" -> do_scan_tokens(advance_one(source), tokens, line)
     "\n" -> do_scan_tokens(advance_one(source), tokens, line + 1)
 
@@ -64,14 +65,14 @@ fn add_simple_token(source, tokens, line, text) {
     Token(
       token_type: text_to_token_type(text),
       lexeme: text,
-      literal: option.None,
+      literal: dynamic.from(Nil),
       line: line,
     )
   do_scan_tokens(source, [token, ..tokens], line)
 }
 
-fn text_to_token_type(char) {
-  case char {
+fn text_to_token_type(text) {
+  case text {
     "(" -> LeftParen
     ")" -> RightParen
     "{" -> LeftBrace
@@ -104,7 +105,7 @@ fn add_number(_source, _tokens, _line) {
 }
 
 fn maybe_equals(source, char, tokens, line) {
-  case string.first(advance_one(source)) {
+  case string.first(source) {
     Ok("=") -> add_simple_token(advance_one(source), tokens, line, char <> "=")
     Ok(_) -> add_simple_token(source, tokens, line, char)
     Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
@@ -112,8 +113,8 @@ fn maybe_equals(source, char, tokens, line) {
 }
 
 fn maybe_comment(source, tokens, line) {
-  case string.first(advance_one(source)) {
-    Ok("/") -> scan_comment(source, tokens, line + 1)
+  case string.first(source) {
+    Ok("/") -> scan_comment(source, tokens, line)
     Ok(_) -> add_simple_token(source, tokens, line, "/")
     Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
   }
@@ -121,7 +122,7 @@ fn maybe_comment(source, tokens, line) {
 
 fn scan_comment(source, tokens, line) {
   case string.split_once(source, "\n") {
-    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line)
+    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line + 1)
     // This means a comment in the last line of the file
     Error(_reason) -> do_scan_tokens("", tokens, line)
   }
@@ -156,7 +157,7 @@ fn add_string_token(source, literal, tokens, line) {
     Token(
       token_type: LoxString,
       lexeme: "\"" <> literal <> "\"",
-      literal: option.Some(literal),
+      literal: dynamic.from(literal),
       line: line,
     )
   do_scan_tokens(source, [token, ..tokens], line)
@@ -164,7 +165,7 @@ fn add_string_token(source, literal, tokens, line) {
 
 fn end_scan(tokens, line) {
   let token =
-    Token(token_type: Eof, lexeme: "", literal: option.None, line: line)
+    Token(token_type: Eof, lexeme: "", literal: dynamic.from(Nil), line: line)
   Ok([token, ..tokens])
 }
 

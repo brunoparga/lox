@@ -3,11 +3,7 @@ import gleam/erlang/file
 import gleam/io
 import gleam/string
 import lox_gleam/scanner
-import lox_gleam/token
 import lox_gleam/errors
-
-type MainType(a) =
-  Result(List(token.Token(a)), errors.LoxGleamError)
 
 pub fn main() {
   case erlang.start_arguments() {
@@ -20,13 +16,13 @@ pub fn main() {
   }
 }
 
-pub fn run_prompt() -> MainType(a) {
+pub fn run_prompt() {
   let assert Ok(line) = erlang.get_line("> ")
   let _ = run(string.trim(line))
   run_prompt()
 }
 
-pub fn run_file(filename: String) -> MainType(a) {
+pub fn run_file(filename: String) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents)
     Error(reason) -> {
@@ -39,7 +35,7 @@ pub fn run_file(filename: String) -> MainType(a) {
   }
 }
 
-pub fn run(source: String) -> MainType(a) {
+pub fn run(source: String) {
   scanner.scan_tokens(source)
   |> io.debug()
 }
