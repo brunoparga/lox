@@ -3,6 +3,7 @@
 
 import gleam/list
 import gleam/option
+import gleam/regex
 import gleam/string
 import lox_gleam/errors
 import lox_gleam/token.{Token}
@@ -57,9 +58,22 @@ fn scan_regular_tokens(source, tokens, line) {
     // Literals
     "\"" -> add_string(advance_one(source), tokens, line)
 
-    // We shouldn't hit this case.
-    _ -> Error(errors.ScanUnexpectedCharacterError)
+    _ -> {
+      case is_digit(char) {
+        True -> add_number(source, tokens, line)
+        False -> Error(errors.ScanUnexpectedCharacterError)
+      }
+    }
   }
+}
+
+fn is_digit(char) {
+  let assert Ok(regex) = regex.from_string("[0-9]")
+  regex.check(regex, char)
+}
+
+fn add_number(_source, _tokens, _line) {
+  Error(errors.NotImplementedError)
 }
 
 fn maybe_equals(source, char, tokens, line) {

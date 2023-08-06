@@ -2,6 +2,7 @@
 
 pub type LoxGleamError {
   ErlangError
+  NotImplementedError
   ScanUnexpectedCharacterError
   ScanUnexpectedEOFError
   ScanUnterminatedStringError
