@@ -40,7 +40,10 @@ pub fn run(source: String) {
   let run_result = scanner.scan_tokens(source)
   case run_result {
     Ok(tokens) -> list.each(tokens, io.debug(_))
-    Error(reason) -> {io.debug(Error(reason)) Nil}
+    Error(reason) -> {
+      io.debug(Error(reason))
+      Nil
+    }
   }
   run_result
 }

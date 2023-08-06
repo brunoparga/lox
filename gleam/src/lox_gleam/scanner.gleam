@@ -1,5 +1,6 @@
-//// Expose scan_tokens, which takes in a string representing Lox source code (whether from a file
-//// or typed into the REPL) and returns, hopefully, a list of tokens for that program.
+//// Expose scan_tokens, which takes in a string representing Lox source
+//// code (whether from a file or typed into the REPL) and returns,
+//// hopefully, a list of tokens for that program.
 
 import gleam/dynamic
 import gleam/float
@@ -26,31 +27,29 @@ pub fn scan_tokens(source) {
 
 fn do_scan_tokens(source, tokens, line) {
   case source == "" {
+    // Add EOF if we're done
     True -> end_scan(tokens, line)
     False -> scan_regular_tokens(source, tokens, line)
   }
 }
 
-/// Functions calling `add_token` have the responsibility to pass it all that it needs; currently
-/// what changes, besides the `TokenType`, is also the text that goes into the Token struct.
 fn scan_regular_tokens(source, tokens, line) {
-  let assert Ok(char) = string.first(source)
+  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char {
     // Easy one-character tokens
     "(" | ")" | "{" | "}" | "," | "." | "+" | "-" | ";" | "*" ->
-      add_simple_token(advance_one(source), tokens, line, char)
+      add_simple_token(new_source, tokens, line, char)
 
     // Chars that might have equals after them
-    "!" | "=" | "<" | ">" ->
-      maybe_equals(advance_one(source), char, tokens, line)
+    "!" | "=" | "<" | ">" -> maybe_equals(new_source, char, tokens, line)
 
     // Slashes, comments and whitespace
-    "/" -> maybe_comment(advance_one(source), tokens, line)
-    " " | "\r" | "\t" -> do_scan_tokens(advance_one(source), tokens, line)
-    "\n" -> do_scan_tokens(advance_one(source), tokens, line + 1)
+    "/" -> maybe_comment(new_source, tokens, line)
+    " " | "\r" | "\t" -> do_scan_tokens(new_source, tokens, line)
+    "\n" -> do_scan_tokens(new_source, tokens, line + 1)
 
-    // Literals
-    "\"" -> add_string(advance_one(source), tokens, line)
+    // Strings
+    "\"" -> add_string(new_source, tokens, line)
 
     _ -> {
       case is_digit(char), is_alpha(char) {
@@ -195,14 +194,13 @@ fn number_text(current, source, decimal_found) {
 }
 
 fn handle_decimal(current, source) {
-  let assert Ok(char) = string.first(source)
+  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   // What follows a decimal point must be a digit
   case is_digit(char) {
     // If it is, we just consume it while we're at it.
     // We also set the flag showing we've passed the decimal.
     True -> {
       let new_current = current <> "." <> char
-      let new_source = advance_one(source)
       number_text(new_current, new_source, True)
     }
     False -> Error(errors.ScanInvalidNumberError)
@@ -212,7 +210,8 @@ fn handle_decimal(current, source) {
 fn handle_digit(current, char, source, decimal_found) {
   case is_digit(char), decimal_found {
     // If the char is a digit, we append it to the number and recurse.
-    True, _ -> number_text(current <> char, advance_one(source), decimal_found)
+    True, _ ->
+      number_text(current <> char, string.drop_left(source, 1), decimal_found)
     // Otherwise, we're done!
     False, True -> Ok(#(current, source))
     False, False -> Ok(#(current <> ".0", source))
@@ -220,8 +219,10 @@ fn handle_digit(current, char, source, decimal_found) {
 }
 
 fn maybe_equals(source, char, tokens, line) {
-  case string.first(source) {
-    Ok("=") -> add_simple_token(advance_one(source), tokens, line, char <> "=")
+  let result = string.pop_grapheme(source)
+  case result {
+    Ok(#("=", new_source)) ->
+      add_simple_token(new_source, tokens, line, char <> "=")
     Ok(_) -> add_simple_token(source, tokens, line, char)
     Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
   }
@@ -252,19 +253,19 @@ fn add_string(source, tokens, line) {
   }
 }
 
-fn do_add_string(source, tokens, line, literal) {
-  case string.contains(literal, "\n") {
-    True -> {
-      let newlines =
-        literal
-        |> string.to_graphemes()
-        |> list.filter(fn(char) { char == "\n" })
-        |> list.length()
-
-      add_string_token(source, literal, tokens, line + newlines)
-    }
-    False -> add_string_token(source, literal, tokens, line)
+fn do_add_string(source, tokens, line, text) {
+  let newlines = case string.contains(text, "\n") {
+    True -> count_newlines(text)
+    False -> 0
   }
+  add_string_token(source, text, tokens, line + newlines)
+}
+
+fn count_newlines(text) {
+  text
+  |> string.to_graphemes()
+  |> list.filter(fn(char) { char == "\n" })
+  |> list.length()
 }
 
 fn add_string_token(source, literal, tokens, line) {
@@ -282,8 +283,4 @@ fn end_scan(tokens, line) {
   let token =
     Token(token_type: Eof, lexeme: "", literal: dynamic.from(Nil), line: line)
   Ok([token, ..tokens])
-}
-
-fn advance_one(source) {
-  string.drop_left(source, 1)
 }
