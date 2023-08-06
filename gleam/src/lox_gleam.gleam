@@ -1,6 +1,7 @@
 import gleam/erlang
 import gleam/erlang/file
 import gleam/io
+import gleam/list
 import gleam/string
 import lox_gleam/scanner
 import lox_gleam/errors
@@ -36,6 +37,10 @@ pub fn run_file(filename: String) {
 }
 
 pub fn run(source: String) {
-  scanner.scan_tokens(source)
-  |> io.debug()
+  let run_result = scanner.scan_tokens(source)
+  case run_result {
+    Ok(tokens) -> list.each(tokens, io.debug(_))
+    Error(reason) -> {io.debug(Error(reason)) Nil}
+  }
+  run_result
 }
