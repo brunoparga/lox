@@ -25,7 +25,7 @@ pub fn scan_tokens(source) {
 
 fn do_scan_tokens(source, tokens, line) {
   case source == "" {
-    True -> do_add_token(Eof, "", tokens, option.None, line)
+    True -> end_scan(tokens, line)
     False -> scan_regular_tokens(source, tokens, line)
   }
 }
@@ -36,16 +36,8 @@ fn scan_regular_tokens(source, tokens, line) {
   let assert Ok(char) = string.first(source)
   case char {
     // Easy one-character tokens
-    "(" -> add_plain_token(source, LeftParen, char, tokens, line, 1)
-    ")" -> add_plain_token(source, RightParen, char, tokens, line, 1)
-    "{" -> add_plain_token(source, LeftBrace, char, tokens, line, 1)
-    "}" -> add_plain_token(source, RightBrace, char, tokens, line, 1)
-    "," -> add_plain_token(source, Comma, char, tokens, line, 1)
-    "." -> add_plain_token(source, Dot, char, tokens, line, 1)
-    "+" -> add_plain_token(source, Plus, char, tokens, line, 1)
-    "-" -> add_plain_token(source, Minus, char, tokens, line, 1)
-    ";" -> add_plain_token(source, Semicolon, char, tokens, line, 1)
-    "*" -> add_plain_token(source, Star, char, tokens, line, 1)
+    "(" | ")" | "{" | "}" | "," | "." | "+" | "-" | ";" | "*" ->
+      add_simple_token(advance_one(source), tokens, line, char)
 
     // Chars that might have equals after them
     "!" | "=" | "<" | ">" -> maybe_equals(source, char, tokens, line)
@@ -67,6 +59,41 @@ fn scan_regular_tokens(source, tokens, line) {
   }
 }
 
+fn add_simple_token(source, tokens, line, text) {
+  let token =
+    Token(
+      token_type: text_to_token_type(text),
+      lexeme: text,
+      literal: option.None,
+      line: line,
+    )
+  do_scan_tokens(source, [token, ..tokens], line)
+}
+
+fn text_to_token_type(char) {
+  case char {
+    "(" -> LeftParen
+    ")" -> RightParen
+    "{" -> LeftBrace
+    "}" -> RightBrace
+    "," -> Comma
+    "." -> Dot
+    "+" -> Plus
+    "-" -> Minus
+    ";" -> Semicolon
+    "*" -> Star
+    "!" -> Bang
+    "=" -> Equal
+    "<" -> Less
+    ">" -> Greater
+    "/" -> Slash
+    "!=" -> BangEqual
+    "==" -> EqualEqual
+    "<=" -> LessEqual
+    ">=" -> GreaterEqual
+  }
+}
+
 fn is_digit(char) {
   let assert Ok(regex) = regex.from_string("[0-9]")
   regex.check(regex, char)
@@ -78,35 +105,16 @@ fn add_number(_source, _tokens, _line) {
 
 fn maybe_equals(source, char, tokens, line) {
   case string.first(advance_one(source)) {
-    Ok("=") -> yes_equals(source, char, tokens, line)
-    Ok(_) -> no_equals(source, char, tokens, line)
+    Ok("=") -> add_simple_token(advance_one(source), tokens, line, char <> "=")
+    Ok(_) -> add_simple_token(source, tokens, line, char)
     Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
-  }
-}
-
-fn no_equals(source, char, tokens, line) {
-  case char {
-    "!" -> add_plain_token(source, Bang, char, tokens, line, 1)
-    "=" -> add_plain_token(source, Equal, char, tokens, line, 1)
-    "<" -> add_plain_token(source, Less, char, tokens, line, 1)
-    ">" -> add_plain_token(source, Greater, char, tokens, line, 1)
-  }
-}
-
-fn yes_equals(source, char, tokens, line) {
-  let text = char <> "="
-  case char {
-    "!" -> add_plain_token(source, BangEqual, text, tokens, line, 2)
-    "=" -> add_plain_token(source, EqualEqual, text, tokens, line, 2)
-    "<" -> add_plain_token(source, LessEqual, text, tokens, line, 2)
-    ">" -> add_plain_token(source, GreaterEqual, text, tokens, line, 2)
   }
 }
 
 fn maybe_comment(source, tokens, line) {
   case string.first(advance_one(source)) {
     Ok("/") -> scan_comment(source, tokens, line + 1)
-    Ok(_) -> add_plain_token(source, Slash, "/", tokens, line, 1)
+    Ok(_) -> add_simple_token(source, tokens, line, "/")
     Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
   }
 }
@@ -123,12 +131,12 @@ fn add_string(source, tokens, line) {
   let result = string.split_once(source, "\"")
   case result {
     Ok(#(literal, new_source)) ->
-      do_add_string(new_source, tokens, literal, line)
+      do_add_string(new_source, tokens, line, literal)
     Error(_reason) -> Error(errors.ScanUnterminatedStringError)
   }
 }
 
-fn do_add_string(source, tokens, literal, line) {
+fn do_add_string(source, tokens, line, literal) {
   case string.contains(literal, "\n") {
     True -> {
       let newlines =
@@ -143,47 +151,23 @@ fn do_add_string(source, tokens, literal, line) {
   }
 }
 
-fn add_plain_token(source, token_type, text, tokens, line, advance) {
-  add_token(source, token_type, text, option.None, tokens, line, advance)
-}
-
 fn add_string_token(source, literal, tokens, line) {
-  let text = "\"" <> literal <> "\""
-  // The string has already been advanced
-  let advance = 0
-  add_token(
-    source,
-    LoxString,
-    text,
-    option.Some(literal),
-    tokens,
-    line,
-    advance,
-  )
-}
-
-/// This function's job is *ONLY* to obtain a new list of tokens, including the one currently being
-/// worked on, as well as a new tail of the source code string, without the characters responsible
-/// for that particular token.
-fn add_token(source, token_type, text, literal, tokens, line, advance) {
-  let assert Ok(new_tokens) =
-    do_add_token(token_type, text, tokens, literal, line)
-  let new_source = string.drop_left(source, advance)
-  do_scan_tokens(new_source, new_tokens, line)
-}
-
-/// This function's job is *ONLY* to receive information needed to build a token, plus an existing
-/// list of tokens, and combine them.
-fn do_add_token(token_type, text, tokens, literal, line) {
   let token =
-    Token(token_type: token_type, lexeme: text, literal: literal, line: line)
+    Token(
+      token_type: LoxString,
+      lexeme: "\"" <> literal <> "\"",
+      literal: option.Some(literal),
+      line: line,
+    )
+  do_scan_tokens(source, [token, ..tokens], line)
+}
+
+fn end_scan(tokens, line) {
+  let token =
+    Token(token_type: Eof, lexeme: "", literal: option.None, line: line)
   Ok([token, ..tokens])
 }
 
 fn advance_one(source) {
-  advance_n(source, 1)
-}
-
-fn advance_n(source, n) {
-  string.drop_left(source, n)
+  string.drop_left(source, 1)
 }
