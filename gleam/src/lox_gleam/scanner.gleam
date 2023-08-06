@@ -33,6 +33,12 @@ fn do_scan_tokens(source, tokens, line) {
   }
 }
 
+fn end_scan(tokens, line) {
+  let token =
+    Token(token_type: Eof, lexeme: "", literal: dynamic.from(Nil), line: line)
+  Ok([token, ..tokens])
+}
+
 fn scan_regular_tokens(source, tokens, line) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char {
@@ -113,9 +119,65 @@ fn text_to_token_type(text) {
   }
 }
 
-fn is_alpha(char) {
-  let assert Ok(regex) = regex.from_string("[a-zA-Z_]")
-  regex.check(regex, char)
+fn maybe_equals(source, char, tokens, line) {
+  let result = string.pop_grapheme(source)
+  case result {
+    Ok(#("=", new_source)) ->
+      add_simple_token(new_source, tokens, line, char <> "=")
+    Ok(_) -> add_simple_token(source, tokens, line, char)
+    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+  }
+}
+
+fn maybe_comment(source, tokens, line) {
+  case string.first(source) {
+    Ok("/") -> scan_comment(source, tokens, line)
+    Ok(_) -> add_simple_token(source, tokens, line, "/")
+    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+  }
+}
+
+fn scan_comment(source, tokens, line) {
+  case string.split_once(source, "\n") {
+    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line + 1)
+    // This means a comment in the last line of the file
+    Error(_reason) -> do_scan_tokens("", tokens, line)
+  }
+}
+
+fn add_string(source, tokens, line) {
+  let result = string.split_once(source, "\"")
+  case result {
+    Ok(#(literal, new_source)) ->
+      do_add_string(new_source, tokens, line, literal)
+    Error(_reason) -> Error(errors.ScanUnterminatedStringError)
+  }
+}
+
+fn do_add_string(source, tokens, line, text) {
+  let newlines = case string.contains(text, "\n") {
+    True -> count_newlines(text)
+    False -> 0
+  }
+  add_string_token(source, text, tokens, line + newlines)
+}
+
+fn count_newlines(text) {
+  text
+  |> string.to_graphemes()
+  |> list.filter(fn(char) { char == "\n" })
+  |> list.length()
+}
+
+fn add_string_token(source, literal, tokens, line) {
+  let token =
+    Token(
+      token_type: LoxString,
+      lexeme: "'" <> literal <> "'",
+      literal: dynamic.from(literal),
+      line: line,
+    )
+  do_scan_tokens(source, [token, ..tokens], line)
 }
 
 fn is_digit(char) {
@@ -123,38 +185,9 @@ fn is_digit(char) {
   regex.check(regex, char)
 }
 
-fn add_identifier(source, tokens, line) {
-  let result = identifier_text("", source)
-  case result {
-    Ok(#(text, new_source)) -> {
-      let token =
-        Token(
-          token_type: text_to_token_type(text),
-          lexeme: text,
-          literal: dynamic.from(Nil),
-          line: line,
-        )
-      do_scan_tokens(new_source, [token, ..tokens], line)
-    }
-    Error(reason) -> Error(reason)
-  }
-}
-
-fn identifier_text(current, source) {
-  // We ensure this is never called with an empty string as source.
-  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
-  case is_alphanumeric(char), new_source {
-    // We're done scanning the lexeme
-    False, _ -> Ok(#(current, source))
-    // We're at the end of the source code
-    True, "" -> Ok(#(current <> char, ""))
-    // Not done yet, so we recurse
-    True, _ -> identifier_text(current <> char, new_source)
-  }
-}
-
-fn is_alphanumeric(char) {
-  is_alpha(char) || is_digit(char)
+fn is_alpha(char) {
+  let assert Ok(regex) = regex.from_string("[a-zA-Z_]")
+  regex.check(regex, char)
 }
 
 fn add_number(source, tokens, line) {
@@ -218,69 +251,36 @@ fn handle_digit(current, char, source, decimal_found) {
   }
 }
 
-fn maybe_equals(source, char, tokens, line) {
-  let result = string.pop_grapheme(source)
+fn is_alphanumeric(char) {
+  is_alpha(char) || is_digit(char)
+}
+
+fn add_identifier(source, tokens, line) {
+  let result = identifier_text("", source)
   case result {
-    Ok(#("=", new_source)) ->
-      add_simple_token(new_source, tokens, line, char <> "=")
-    Ok(_) -> add_simple_token(source, tokens, line, char)
-    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+    Ok(#(text, new_source)) -> {
+      let token =
+        Token(
+          token_type: text_to_token_type(text),
+          lexeme: text,
+          literal: dynamic.from(Nil),
+          line: line,
+        )
+      do_scan_tokens(new_source, [token, ..tokens], line)
+    }
+    Error(reason) -> Error(reason)
   }
 }
 
-fn maybe_comment(source, tokens, line) {
-  case string.first(source) {
-    Ok("/") -> scan_comment(source, tokens, line)
-    Ok(_) -> add_simple_token(source, tokens, line, "/")
-    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+fn identifier_text(current, source) {
+  // We ensure this is never called with an empty string as source.
+  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
+  case is_alphanumeric(char), new_source {
+    // We're done scanning the lexeme
+    False, _ -> Ok(#(current, source))
+    // We're at the end of the source code
+    True, "" -> Ok(#(current <> char, ""))
+    // Not done yet, so we recurse
+    True, _ -> identifier_text(current <> char, new_source)
   }
-}
-
-fn scan_comment(source, tokens, line) {
-  case string.split_once(source, "\n") {
-    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line + 1)
-    // This means a comment in the last line of the file
-    Error(_reason) -> do_scan_tokens("", tokens, line)
-  }
-}
-
-fn add_string(source, tokens, line) {
-  let result = string.split_once(source, "\"")
-  case result {
-    Ok(#(literal, new_source)) ->
-      do_add_string(new_source, tokens, line, literal)
-    Error(_reason) -> Error(errors.ScanUnterminatedStringError)
-  }
-}
-
-fn do_add_string(source, tokens, line, text) {
-  let newlines = case string.contains(text, "\n") {
-    True -> count_newlines(text)
-    False -> 0
-  }
-  add_string_token(source, text, tokens, line + newlines)
-}
-
-fn count_newlines(text) {
-  text
-  |> string.to_graphemes()
-  |> list.filter(fn(char) { char == "\n" })
-  |> list.length()
-}
-
-fn add_string_token(source, literal, tokens, line) {
-  let token =
-    Token(
-      token_type: LoxString,
-      lexeme: "'" <> literal <> "'",
-      literal: dynamic.from(literal),
-      line: line,
-    )
-  do_scan_tokens(source, [token, ..tokens], line)
-}
-
-fn end_scan(tokens, line) {
-  let token =
-    Token(token_type: Eof, lexeme: "", literal: dynamic.from(Nil), line: line)
-  Ok([token, ..tokens])
 }
