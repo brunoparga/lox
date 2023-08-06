@@ -53,9 +53,10 @@ fn scan_regular_tokens(source, tokens, line) {
     "\"" -> add_string(advance_one(source), tokens, line)
 
     _ -> {
-      case is_digit(char) {
-        True -> add_number(source, tokens, line)
-        False -> Error(errors.ScanUnexpectedCharacterError)
+      case is_digit(char), is_alpha(char) {
+        True, False -> add_number(source, tokens, line)
+        False, True -> add_identifier(source, tokens, line)
+        False, False -> Error(errors.ScanUnexpectedCharacterError)
       }
     }
   }
@@ -93,7 +94,29 @@ fn text_to_token_type(text) {
     "==" -> EqualEqual
     "<=" -> LessEqual
     ">=" -> GreaterEqual
+    "and" -> And
+    "class" -> Class
+    "else" -> Else
+    "false" -> LoxFalse
+    "for" -> For
+    "fun" -> Fun
+    "if" -> If
+    "nil" -> LoxNil
+    "or" -> Or
+    "print" -> Print
+    "return" -> Return
+    "super" -> Super
+    "this" -> This
+    "true" -> LoxTrue
+    "var" -> Var
+    "while" -> While
+    _ -> Identifier
   }
+}
+
+fn is_alpha(char) {
+  let assert Ok(regex) = regex.from_string("[a-zA-Z_]")
+  regex.check(regex, char)
 }
 
 fn is_digit(char) {
@@ -101,15 +124,49 @@ fn is_digit(char) {
   regex.check(regex, char)
 }
 
-fn add_number(source, tokens, line) {
-  let result = number_literal("", source, False)
+fn add_identifier(source, tokens, line) {
+  let result = identifier_text("", source)
   case result {
-    Ok(#(literal, new_source)) -> {
-      let assert Ok(value) = float.parse(literal)
+    Ok(#(text, new_source)) -> {
+      let token =
+        Token(
+          token_type: text_to_token_type(text),
+          lexeme: text,
+          literal: dynamic.from(Nil),
+          line: line,
+        )
+      do_scan_tokens(new_source, [token, ..tokens], line)
+    }
+    Error(reason) -> Error(reason)
+  }
+}
+
+fn identifier_text(current, source) {
+  // We ensure this is never called with an empty string as source.
+  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
+  case is_alphanumeric(char), new_source {
+    // We're done scanning the lexeme
+    False, _ -> Ok(#(current, source))
+    // We're at the end of the source code
+    True, "" -> Ok(#(current <> char, ""))
+    // Not done yet, so we recurse
+    True, _ -> identifier_text(current <> char, new_source)
+  }
+}
+
+fn is_alphanumeric(char) {
+  is_alpha(char) || is_digit(char)
+}
+
+fn add_number(source, tokens, line) {
+  let result = number_text("", source, False)
+  case result {
+    Ok(#(text, new_source)) -> {
+      let assert Ok(value) = float.parse(text)
       let token =
         Token(
           token_type: Number,
-          lexeme: "\"" <> literal <> "\"",
+          lexeme: text,
           literal: dynamic.from(value),
           line: line,
         )
@@ -119,7 +176,7 @@ fn add_number(source, tokens, line) {
   }
 }
 
-fn number_literal(current, source, decimal_found) {
+fn number_text(current, source, decimal_found) {
   // We ensure this is never called with an empty string as source.
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char, new_source, decimal_found {
@@ -146,7 +203,7 @@ fn handle_decimal(current, source) {
     True -> {
       let new_current = current <> "." <> char
       let new_source = advance_one(source)
-      number_literal(new_current, new_source, True)
+      number_text(new_current, new_source, True)
     }
     False -> Error(errors.ScanInvalidNumberError)
   }
@@ -155,7 +212,7 @@ fn handle_decimal(current, source) {
 fn handle_digit(current, char, source, decimal_found) {
   case is_digit(char), decimal_found {
     // If the char is a digit, we append it to the number and recurse.
-    True, _ -> number_literal(current <> char, advance_one(source), decimal_found)
+    True, _ -> number_text(current <> char, advance_one(source), decimal_found)
     // Otherwise, we're done!
     False, True -> Ok(#(current, source))
     False, False -> Ok(#(current <> ".0", source))
@@ -214,7 +271,7 @@ fn add_string_token(source, literal, tokens, line) {
   let token =
     Token(
       token_type: LoxString,
-      lexeme: "\"" <> literal <> "\"",
+      lexeme: "'" <> literal <> "'",
       literal: dynamic.from(literal),
       line: line,
     )
