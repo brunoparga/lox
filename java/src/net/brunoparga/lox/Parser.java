@@ -160,15 +160,18 @@ class Parser {
         return;
 
       switch (peek().type) {
-        case CLASS:
-        case FOR:
-        case FUN:
-        case IF:
-        case PRINT:
-        case RETURN:
-        case VAR:
-        case WHILE:
-          return;
+      case CLASS:
+      case FOR:
+      case FUN:
+      case IF:
+      case PRINT:
+      case RETURN:
+      case VAR:
+      case WHILE:
+        return;
+
+      default:
+        break;
       }
 
       advance();
