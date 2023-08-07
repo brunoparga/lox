@@ -5,11 +5,22 @@ import java.util.List;
 import static net.brunoparga.lox.TokenType.*;
 
 class Parser {
+  private static class ParseError extends RuntimeException {
+  }
+
   private final List<Token> tokens;
   private int current = 0;
 
   Parser(List<Token> tokens) {
     this.tokens = tokens;
+  }
+
+  Expr parse() {
+    try {
+      return expression();
+    } catch (ParseError error) {
+      return null;
+    }
   }
 
   private Expr expression() {
@@ -91,11 +102,7 @@ class Parser {
       return new Expr.Grouping(expr);
     }
 
-    return new Expr.Literal(null);
-  }
-
-  private void consume(TokenType type, String string) {
-
+    throw error(peek(), "Expect expression.");
   }
 
   private boolean match(TokenType... types) {
@@ -107,6 +114,13 @@ class Parser {
     }
 
     return false;
+  }
+
+  private Token consume(TokenType type, String message) {
+    if (check(type))
+      return advance();
+
+    throw error(peek(), message);
   }
 
   private boolean check(TokenType type) {
@@ -131,5 +145,33 @@ class Parser {
 
   private Token previous() {
     return tokens.get(current - 1);
+  }
+
+  private ParseError error(Token token, String message) {
+    Lox.error(token, message);
+    return new ParseError();
+  }
+
+  private void synchronize() {
+    advance();
+
+    while (!isAtEnd()) {
+      if (previous().type == SEMICOLON)
+        return;
+
+      switch (peek().type) {
+        case CLASS:
+        case FOR:
+        case FUN:
+        case IF:
+        case PRINT:
+        case RETURN:
+        case VAR:
+        case WHILE:
+          return;
+      }
+
+      advance();
+    }
   }
 }
