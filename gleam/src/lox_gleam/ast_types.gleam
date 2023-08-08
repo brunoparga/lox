@@ -2,6 +2,7 @@ import gleam/dynamic
 import lox_gleam/token.{Token}
 
 pub type Expr {
+  Expr
   Binary(left: Expr, operator: Token, right: Expr)
   Grouping(expression: Expr)
   Literal(value: dynamic.Dynamic)

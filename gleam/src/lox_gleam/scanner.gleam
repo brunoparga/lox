@@ -209,20 +209,18 @@ fn add_number(source, tokens, line) {
 }
 
 fn number_text(current, source, decimal_found) {
-  // We ensure this is never called with an empty string as source.
-  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
-  case char, new_source, decimal_found {
-    // Can't end the file with the decimal dot of a number.
-    ".", "", _ -> Error(errors.ScanInvalidNumberError)
-    // But it's okay if it's a digit.
-    _, "", True -> Ok(#(current <> char, ""))
-    _, "", False -> Ok(#(current <> char <> ".0", ""))
-    // Now we handle a decimal point. It must be the only one
-    ".", _, True -> Error(errors.ScanInvalidNumberError)
-    ".", _, False -> handle_decimal(current, new_source)
-    // Now for the most general case: we're not done scanning the file,
-    // the character is not a dot, and the decimal flag is irrelevant.
-    _, _, _ -> handle_digit(current, char, source, decimal_found)
+  let result = string.pop_grapheme(source)
+  case result, decimal_found {
+    // Trying to have a number with two decimal points
+    Ok(#(".", _)), True -> Error(errors.ScanInvalidNumberError)
+    // Process the decimal and the first character after it
+    Ok(#(".", new_source)), False -> handle_decimal(current, new_source)
+    // See what the new character is - recurse or return
+    Ok(#(char, _)), _ -> handle_digit(current, char, source, decimal_found)
+    // A float at the end of the source
+    Error(_), True -> Ok(#(current, source))
+    // An integer at the end of the source
+    Error(_), False -> Ok(#(current <> ".0", source))
   }
 }
 
