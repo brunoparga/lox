@@ -14,15 +14,14 @@ pub fn print(expr: ast_types.Expr) {
 }
 
 fn ast_string_builder(expr) {
-  string_builder.new()
-  |> string_builder.append_builder(case expr {
-    ast_types.Expr -> string_builder.from_string("")
+  case expr {
     ast_types.Binary(left, operator, right) ->
       print_binary(left, operator, right)
+    ast_types.Expr -> string_builder.from_string("")
     ast_types.Grouping(expression) -> print_grouping(expression)
     ast_types.Literal(value) -> print_literal(value)
     ast_types.Unary(operator, right) -> print_unary(operator, right)
-  })
+  }
 }
 
 fn print_binary(left, operator: token.Token, right) {
