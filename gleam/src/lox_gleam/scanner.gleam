@@ -1,4 +1,4 @@
-//// Expose scan_tokens, which takes in a string representing Lox source
+//// Expose scan, which takes in a string representing Lox source
 //// code (whether from a file or typed into the REPL) and returns,
 //// hopefully, a list of tokens for that program.
 
@@ -7,7 +7,7 @@ import gleam/float
 import gleam/list
 import gleam/regex
 import gleam/string
-import lox_gleam/errors
+import lox_gleam/error
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
@@ -17,19 +17,19 @@ import lox_gleam/token_type.{
   Var, While,
 }
 
-pub fn scan_tokens(source) {
-  let reversed_tokens = do_scan_tokens(source, [], 1)
+pub fn scan(source) {
+  let reversed_tokens = do_scan(source, [], 1)
   case reversed_tokens {
     Ok(tokens) -> Ok(list.reverse(tokens))
     Error(reason) -> Error(reason)
   }
 }
 
-fn do_scan_tokens(source, tokens, line) {
+fn do_scan(source, tokens, line) {
   case source == "" {
     // Add EOF if we're done
     True -> end_scan(tokens, line)
-    False -> scan_regular_tokens(source, tokens, line)
+    False -> scan_tokens(source, tokens, line)
   }
 }
 
@@ -39,7 +39,7 @@ fn end_scan(tokens, line) {
   Ok([token, ..tokens])
 }
 
-fn scan_regular_tokens(source, tokens, line) {
+fn scan_tokens(source, tokens, line) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char {
     // Easy one-character tokens
@@ -51,8 +51,8 @@ fn scan_regular_tokens(source, tokens, line) {
 
     // Slashes, comments and whitespace
     "/" -> maybe_comment(new_source, tokens, line)
-    " " | "\r" | "\t" -> do_scan_tokens(new_source, tokens, line)
-    "\n" -> do_scan_tokens(new_source, tokens, line + 1)
+    " " | "\r" | "\t" -> do_scan(new_source, tokens, line)
+    "\n" -> do_scan(new_source, tokens, line + 1)
 
     // Strings
     "\"" -> add_string(new_source, tokens, line)
@@ -61,7 +61,8 @@ fn scan_regular_tokens(source, tokens, line) {
       case is_digit(char), is_alpha(char) {
         True, False -> add_number(source, tokens, line)
         False, True -> add_identifier(source, tokens, line)
-        False, False -> Error(errors.ScanUnexpectedCharacterError)
+        False, False ->
+          Error(error.ScanError("unexpected character.", line: line))
       }
     }
   }
@@ -75,7 +76,7 @@ fn add_simple_token(source, tokens, line, text) {
       literal: dynamic.from(Nil),
       line: line,
     )
-  do_scan_tokens(source, [token, ..tokens], line)
+  do_scan(source, [token, ..tokens], line)
 }
 
 fn text_to_token_type(text) {
@@ -125,7 +126,8 @@ fn maybe_equals(source, char, tokens, line) {
     Ok(#("=", new_source)) ->
       add_simple_token(new_source, tokens, line, char <> "=")
     Ok(_) -> add_simple_token(source, tokens, line, char)
-    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+    Error(_reason) ->
+      Error(error.ScanError(message: "unexpected end of file.", line: line))
   }
 }
 
@@ -133,15 +135,16 @@ fn maybe_comment(source, tokens, line) {
   case string.first(source) {
     Ok("/") -> scan_comment(source, tokens, line)
     Ok(_) -> add_simple_token(source, tokens, line, "/")
-    Error(_reason) -> Error(errors.ScanUnexpectedEOFError)
+    Error(_reason) ->
+      Error(error.ScanError(message: "unexpected end of file.", line: line))
   }
 }
 
 fn scan_comment(source, tokens, line) {
   case string.split_once(source, "\n") {
-    Ok(#(_comment, new_source)) -> do_scan_tokens(new_source, tokens, line + 1)
+    Ok(#(_comment, new_source)) -> do_scan(new_source, tokens, line + 1)
     // This means a comment in the last line of the file
-    Error(_reason) -> do_scan_tokens("", tokens, line)
+    Error(_reason) -> do_scan("", tokens, line)
   }
 }
 
@@ -150,7 +153,8 @@ fn add_string(source, tokens, line) {
   case result {
     Ok(#(literal, new_source)) ->
       do_add_string(new_source, tokens, line, literal)
-    Error(_reason) -> Error(errors.ScanUnterminatedStringError)
+    Error(_reason) ->
+      Error(error.ScanError(message: "unterminated string.", line: line))
   }
 }
 
@@ -177,7 +181,7 @@ fn add_string_token(source, literal, tokens, line) {
       literal: dynamic.from(literal),
       line: line,
     )
-  do_scan_tokens(source, [token, ..tokens], line)
+  do_scan(source, [token, ..tokens], line)
 }
 
 fn is_digit(char) {
@@ -202,9 +206,15 @@ fn add_number(source, tokens, line) {
           literal: dynamic.from(value),
           line: line,
         )
-      do_scan_tokens(new_source, [token, ..tokens], line)
+      do_scan(new_source, [token, ..tokens], line)
     }
-    Error(reason) -> Error(reason)
+    Error(error.ScanInvalidNumberError) ->
+      Error(error.ScanError("error with decimal point.", line: line))
+    Error(_reason) ->
+      Error(error.ScanError(
+        message: "unknown error when processing number.",
+        line: line,
+      ))
   }
 }
 
@@ -212,7 +222,7 @@ fn number_text(current, source, decimal_found) {
   let result = string.pop_grapheme(source)
   case result, decimal_found {
     // Trying to have a number with two decimal points
-    Ok(#(".", _)), True -> Error(errors.ScanInvalidNumberError)
+    Ok(#(".", _)), True -> Error(error.ScanInvalidNumberError)
     // Process the decimal and the first character after it
     Ok(#(".", new_source)), False -> handle_decimal(current, new_source)
     // See what the new character is - recurse or return
@@ -234,7 +244,7 @@ fn handle_decimal(current, source) {
       let new_current = current <> "." <> char
       number_text(new_current, new_source, True)
     }
-    False -> Error(errors.ScanInvalidNumberError)
+    False -> Error(error.ScanInvalidNumberError)
   }
 }
 
@@ -264,21 +274,25 @@ fn add_identifier(source, tokens, line) {
           literal: dynamic.from(Nil),
           line: line,
         )
-      do_scan_tokens(new_source, [token, ..tokens], line)
+      do_scan(new_source, [token, ..tokens], line)
     }
-    Error(reason) -> Error(reason)
+    Error(_reason) ->
+      Error(error.ScanError(message: "unexpected end of file.", line: line))
   }
 }
 
 fn identifier_text(current, source) {
-  // We ensure this is never called with an empty string as source.
-  let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
-  case is_alphanumeric(char), new_source {
-    // We're done scanning the lexeme
-    False, _ -> Ok(#(current, source))
-    // We're at the end of the source code
-    True, "" -> Ok(#(current <> char, ""))
-    // Not done yet, so we recurse
-    True, _ -> identifier_text(current <> char, new_source)
+  case string.pop_grapheme(source) {
+    Ok(#(char, new_source)) -> {
+      case is_alphanumeric(char), new_source {
+        // We're done scanning the lexeme
+        False, _ -> Ok(#(current, source))
+        // We're at the end of the source code
+        True, "" -> Ok(#(current <> char, ""))
+        // Not done yet, so we recurse
+        True, _ -> identifier_text(current <> char, new_source)
+      }
+    }
+    Error(_) -> Error(error.ScanUnexpectedEOFError)
   }
 }

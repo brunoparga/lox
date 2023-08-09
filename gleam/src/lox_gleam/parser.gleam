@@ -1,6 +1,7 @@
 import gleam/dynamic
 import gleam/list
 import lox_gleam/ast_types.{Binary, Expr, Grouping, Literal, Unary}
+import lox_gleam/error
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   Bang, BangEqual, Eof, EqualEqual, Greater, GreaterEqual, LeftParen, Less,
@@ -8,9 +9,16 @@ import lox_gleam/token_type.{
   Star, TokenType,
 }
 
-pub fn parse(tokens: List(Token)) -> Expr {
-  let #(expr, _consumed) = expression(tokens)
-  expr
+pub fn parse(
+  scan_result: Result(List(Token), error.LoxGleamError),
+) -> Result(Expr, error.LoxGleamError) {
+  case scan_result {
+    Ok(tokens) -> {
+      let #(expr, _consumed) = expression(tokens)
+      Ok(expr)
+    }
+    Error(reason) -> Error(reason)
+  }
 }
 
 fn expression(tokens) -> #(Expr, List(Token)) {
