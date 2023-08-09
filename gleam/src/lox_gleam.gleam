@@ -3,29 +3,35 @@ import gleam/erlang/file
 import gleam/io
 import gleam/string
 import lox_gleam/ast_printer
-import lox_gleam/errors
+import lox_gleam/errors.{LoxGleamError}
 import lox_gleam/parser
 import lox_gleam/scanner
 
-pub fn main() {
+pub fn main() -> Result(String, LoxGleamError) {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
     _ -> {
       io.println_error("Usage: gleam run -- [script]")
       Error(errors.TooManyArgumentsError)
-      Nil
     }
   }
 }
 
-pub fn run_prompt() {
-  let assert Ok(line) = erlang.get_line("> ")
-  let _ = run(string.trim(line))
-  run_prompt()
+fn run_prompt() {
+  io.println("Welcome to the Lox REPL.")
+  io.println("Enter Lox code to be evaluated, or hit Ctrl+C twice to exit")
+  do_run_prompt()
+  Ok("Leaving Lox REPL.")
 }
 
-pub fn run_file(filename: String) {
+fn do_run_prompt() {
+  let assert Ok(line) = erlang.get_line("> ")
+  let _ = run(string.trim(line))
+  do_run_prompt()
+}
+
+fn run_file(filename: String) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents)
     Error(reason) -> {
@@ -34,7 +40,6 @@ pub fn run_file(filename: String) {
       |> io.println_error()
 
       Error(errors.ErlangError)
-      Nil
     }
   }
 }
@@ -46,10 +51,13 @@ pub fn run(source: String) {
       tokens
       |> parser.parse()
       |> ast_printer.print()
+      |> io.debug()
+      |> Ok()
     }
     Error(reason) -> {
-      io.debug(Error(reason))
-      Nil
+      reason
+      |> io.debug()
+      |> Error()
     }
   }
 }
