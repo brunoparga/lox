@@ -1,3 +1,6 @@
+//// Expose `parse`, a function that takes in a list of Lox tokens and
+//// returns an abstract syntax tree.
+
 import gleam/dynamic
 import gleam/list
 import lox_gleam/ast_types.{Binary, Expr, Grouping, Literal, Unary}

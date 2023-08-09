@@ -10,6 +10,7 @@ pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
   ParseError(message: String, line: Int, tokens: List(Token), exprs: List(Expr))
+  RuntimeError(message: String, token: Token)
   ScanError(message: String, line: Int)
   ScanInvalidNumberError
   ScanUnexpectedEOFError

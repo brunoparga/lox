@@ -1,9 +1,18 @@
+//// Lox is the simple programming language for which a Java and a C
+//// interpreters are demonstrated in the book Crafting Interpreters, by
+//// Robert Nystrom (https://craftinginterpreters.com).
+////
+//// This package aims to be the first complete, published version of the
+//// code from the book ported to Gleam, the statically typed language
+//// running on Erlang's VM.
+
 import gleam/erlang
 import gleam/erlang/file
 import gleam/io
 import gleam/string
 import lox_gleam/ast_printer
 import lox_gleam/error
+import lox_gleam/interpreter
 import lox_gleam/parser
 import lox_gleam/scanner
 
@@ -37,17 +46,21 @@ fn run_file(filename: String) {
 }
 
 pub fn run(source: String) {
-  let result =
-    source
-    |> scanner.scan()
-    |> parser.parse
-  case result {
-    Ok(expr) -> {
-      expr
-      |> ast_printer.print()
-      |> io.debug()
-      |> Ok()
-    }
-    Error(error_type) -> error.handle_error(error_type)
-  }
+  // let result =
+  source
+  |> scanner.scan()
+  |> parser.parse()
+  |> interpreter.interpret()
+  |> io.debug()
+  |> string.inspect
+  |> Ok()
+  // case result {
+  //   Ok(expr) -> {
+  //     expr
+  //     |> ast_printer.print()
+  //     |> io.debug()
+  //     |> Ok()
+  //   }
+  //   Error(error_type) -> error.handle_error(error_type)
+  // }
 }
