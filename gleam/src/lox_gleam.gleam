@@ -7,7 +7,7 @@ import lox_gleam/error
 import lox_gleam/parser
 import lox_gleam/scanner
 
-pub fn main() -> Result(String, error.LoxGleamError) {
+pub fn main() -> error.LoxResult(String) {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
