@@ -15,14 +15,35 @@ type ExprsAndTokens =
 pub fn parse(scan_result: LoxResult(List(Token))) -> LoxResult(Expr) {
   case scan_result {
     Ok(tokens) -> do_parse(tokens)
-    Error(reason) -> Error(reason)
+    Error(error.ScanError(..) as error) -> Error(error)
+    Error(error) -> handle_error(error)
+  }
+}
+
+fn handle_error(error) {
+  case error {
+    ParseError(message: message, line: line, exprs: exprs, tokens: tokens) -> {
+      case tokens {
+        [] -> Error(error)
+        _ -> {
+          let assert Ok(#(new_expr, other_tokens)) = expression(tokens)
+          handle_error(ParseError(
+            message: message,
+            line: line,
+            exprs: [new_expr, ..exprs],
+            tokens: other_tokens,
+          ))
+        }
+      }
+    }
+    _ -> Error(error)
   }
 }
 
 fn do_parse(tokens) {
   case expression(tokens) {
     Ok(#(expr, _consumed)) -> Ok(expr)
-    Error(reason) -> Error(reason)
+    Error(error) -> Error(error)
   }
 }
 
@@ -64,7 +85,7 @@ fn unary(tokens) -> LoxResult(ExprsAndTokens) {
           let unary_expr = Unary(operator: token_type, right: right, line: line)
           Ok(#(unary_expr, tokens2))
         }
-        Error(reason) -> Error(reason)
+        Error(error) -> Error(error)
       }
     }
     False -> primary(tokens)
@@ -103,9 +124,15 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprsAndTokens) {
           let expr = Grouping(expression: inner_expr, line: first_token.line)
           Ok(#(expr, tokens2))
         }
-        Ok(_) ->
-          Error(ParseError(message: "unmatched '('.", line: first_token.line))
-        Error(reason) -> Error(reason)
+        Ok(#(inner_expr, [Token(lexeme: not_right_paren, ..), ..tokens2])) -> {
+          Error(ParseError(
+            message: "unmatched '(', got " <> not_right_paren <> " instead.",
+            line: first_token.line,
+            tokens: tokens2,
+            exprs: [inner_expr],
+          ))
+        }
+        Error(error) -> Error(error)
       }
     }
     Eof ->
@@ -113,7 +140,13 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprsAndTokens) {
         Literal(value: dynamic.from(Nil), line: first_token.line),
         other_tokens,
       ))
-    _ -> Error(ParseError(message: "unexpected token.", line: first_token.line))
+    _ ->
+      Error(ParseError(
+        message: "unexpected token.",
+        line: first_token.line,
+        tokens: other_tokens,
+        exprs: [],
+      ))
   }
 }
 
@@ -125,7 +158,7 @@ fn binary_inner(types, function) {
   fn(expr_and_tokens) -> LoxResult(ExprsAndTokens) {
     case expr_and_tokens {
       Ok(#(expr, tokens)) -> happy_path(types, function)(expr, tokens)
-      Error(reason) -> Error(reason)
+      Error(error) -> Error(error)
     }
   }
 }
@@ -148,6 +181,6 @@ fn build_binary(types, function, left, first_token, other_tokens) {
         Binary(operator: token_type, left: left, right: right, line: line)
       binary_inner(types, function)(Ok(#(binary, tokens2)))
     }
-    Error(reason) -> Error(reason)
+    Error(error) -> Error(error)
   }
 }

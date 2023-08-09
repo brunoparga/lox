@@ -3,11 +3,13 @@
 
 import gleam/int
 import gleam/io
+import lox_gleam/token.{Token}
+import lox_gleam/ast_types.{Expr}
 
 pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
-  ParseError(message: String, line: Int)
+  ParseError(message: String, line: Int, tokens: List(Token), exprs: List(Expr))
   ScanError(message: String, line: Int)
   ScanInvalidNumberError
   ScanUnexpectedEOFError
@@ -20,7 +22,7 @@ pub type LoxResult(t) =
 pub fn handle_error(error_type) {
   let message = case error_type {
     ErlangError(message) -> "Erlang error when opening file: " <> message <> "."
-    ParseError(message, line) ->
+    ParseError(message, line, ..) ->
       "Parse error on line " <> int.to_string(line) <> ": " <> message
     ScanError(message, line) ->
       "Scan error on line " <> int.to_string(line) <> ": " <> message

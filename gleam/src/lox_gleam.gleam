@@ -31,8 +31,8 @@ fn do_run_prompt() {
 fn run_file(filename: String) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents)
-    Error(reason) ->
-      error.handle_error(error.ErlangError(message: string.inspect(reason)))
+    Error(error) ->
+      error.handle_error(error.ErlangError(message: string.inspect(error)))
   }
 }
 

@@ -21,7 +21,7 @@ pub fn scan(source) {
   let reversed_tokens = do_scan(source, [], 1)
   case reversed_tokens {
     Ok(tokens) -> Ok(list.reverse(tokens))
-    Error(reason) -> Error(reason)
+    Error(error) -> Error(error)
   }
 }
 
