@@ -5,123 +5,149 @@ import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   Bang, BangEqual, Eof, EqualEqual, Greater, GreaterEqual, LeftParen, Less,
   LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue, Minus, Number, Plus, Slash,
-  Star,
+  Star, TokenType,
 }
 
-pub fn parse(tokens: List(Token)) {
-  let #(_eof, [expr, .._exprs]) = expression(tokens, [Expr])
+pub fn parse(tokens: List(Token)) -> Expr {
+  let #(expr, _consumed) = expression(tokens)
   expr
 }
 
-fn expression(tokens, exprs) -> #(List(Token), List(Expr)) {
-  equality(tokens, exprs)
+fn expression(tokens) -> #(Expr, List(Token)) {
+  equality(tokens)
 }
 
-fn equality(tokens, exprs) {
-  parse_binary(tokens, exprs, [BangEqual, EqualEqual], comparison)
+fn equality(tokens) {
+  tokens
+  |> comparison()
+  |> equality_inner()
 }
 
-fn comparison(tokens, exprs) {
-  parse_binary(tokens, exprs, [Less, LessEqual, Greater, GreaterEqual], term)
-}
-
-fn term(tokens, exprs) {
-  parse_binary(tokens, exprs, [Plus, Minus], factor)
-}
-
-fn factor(tokens, exprs) {
-  parse_binary(tokens, exprs, [Slash, Star], unary)
-}
-
-fn unary(tokens: List(Token), exprs) {
-  let [first_token, ..other_tokens] = tokens
-  let is_unary_operator =
-    [Bang, Minus]
-    |> list.any(match(_, first_token))
-  case is_unary_operator {
-    True -> parse_unary(other_tokens, exprs, first_token)
-    False -> primary(tokens, exprs)
+fn equality_inner(expr_and_tokens) {
+  let #(expr, tokens) = expr_and_tokens
+  let [first_token, ..tokens1] = tokens
+  case match(first_token, [BangEqual, EqualEqual]) {
+    True -> {
+      let #(right, tokens2) = comparison(tokens1)
+      let Token(line: line, token_type: token_type, ..) = first_token
+      let term =
+        Binary(operator: token_type, left: expr, right: right, line: line)
+      equality_inner(#(term, tokens2))
+    }
+    False -> #(expr, tokens)
   }
 }
 
-fn primary(tokens: List(Token), exprs) {
+fn comparison(tokens) {
+  tokens
+  |> term()
+  |> comparison_inner()
+}
+
+fn comparison_inner(expr_and_tokens) {
+  let #(expr, tokens) = expr_and_tokens
+  let [first_token, ..tokens1] = tokens
+  case match(first_token, [Greater, GreaterEqual, Less, LessEqual]) {
+    True -> {
+      let #(right, tokens2) = term(tokens1)
+      let Token(line: line, token_type: token_type, ..) = first_token
+      let term =
+        Binary(operator: token_type, left: expr, right: right, line: line)
+      comparison_inner(#(term, tokens2))
+    }
+    False -> #(expr, tokens)
+  }
+}
+
+fn term(tokens) {
+  tokens
+  |> factor()
+  |> term_inner()
+}
+
+fn term_inner(expr_and_tokens) {
+  let #(expr, tokens) = expr_and_tokens
+  let [first_token, ..tokens1] = tokens
+  case match(first_token, [Minus, Plus]) {
+    True -> {
+      let #(right, tokens2) = factor(tokens1)
+      let Token(line: line, token_type: token_type, ..) = first_token
+      let term =
+        Binary(operator: token_type, left: expr, right: right, line: line)
+      term_inner(#(term, tokens2))
+    }
+    False -> #(expr, tokens)
+  }
+}
+
+fn factor(tokens) {
+  tokens
+  |> unary()
+  |> factor_inner()
+}
+
+fn factor_inner(expr_and_tokens) {
+  let #(expr, tokens) = expr_and_tokens
+  let [first_token, ..tokens1] = tokens
+  case match(first_token, [Slash, Star]) {
+    True -> {
+      let #(right, tokens2) = unary(tokens1)
+      let Token(line: line, token_type: token_type, ..) = first_token
+      let factor =
+        Binary(operator: token_type, left: expr, right: right, line: line)
+      factor_inner(#(factor, tokens2))
+    }
+    False -> #(expr, tokens)
+  }
+}
+
+fn unary(tokens) {
+  let [first_token, ..tokens1] = tokens
+  case match(first_token, [Bang, Minus]) {
+    True -> {
+      let #(right, tokens2) = unary(tokens1)
+      let Token(line: line, token_type: token_type, ..) = first_token
+      let unary_expr = Unary(operator: token_type, right: right, line: line)
+      #(unary_expr, tokens2)
+    }
+    False -> primary(tokens)
+  }
+}
+
+fn primary(tokens: List(Token)) -> #(Expr, List(Token)) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
-    LoxFalse -> build_literal(dynamic.from(False), other_tokens, exprs)
-    LoxTrue -> build_literal(dynamic.from(True), other_tokens, exprs)
-    LoxNil -> build_literal(dynamic.from(Nil), other_tokens, exprs)
-    LoxString | Number ->
-      build_literal(dynamic.from(first_token.literal), other_tokens, exprs)
+    LoxFalse -> #(
+      Literal(value: dynamic.from(False), line: first_token.line),
+      other_tokens,
+    )
+    LoxTrue -> #(
+      Literal(value: dynamic.from(True), line: first_token.line),
+      other_tokens,
+    )
+    LoxNil -> #(
+      Literal(value: dynamic.from(Nil), line: first_token.line),
+      other_tokens,
+    )
+    LoxString | Number -> #(
+      Literal(value: dynamic.from(first_token.literal), line: first_token.line),
+      other_tokens,
+    )
     LeftParen -> {
-      let #([_right_paren, ..new_tokens], [inner_expr, ..new_exprs]) =
-        expression(other_tokens, exprs)
-      let expr = Grouping(expression: inner_expr)
-      expression(new_tokens, [expr, ..new_exprs])
+      let #(inner_expr, [_right_paren, ..tokens2]) = expression(other_tokens)
+      // For now we're only concerned with the happy path; there
+      // definitely is a right paren here.
+      let expr = Grouping(expression: inner_expr, line: first_token.line)
+      #(expr, tokens2)
     }
-    _ -> #([Token(Eof, "", dynamic.from(Nil), 1)], exprs)
+    Eof -> #(
+      Literal(value: dynamic.from(Nil), line: first_token.line),
+      other_tokens,
+    )
+    _ -> #(Literal(value: dynamic.from(Nil), line: first_token.line), tokens)
   }
 }
 
-fn build_literal(value, other_tokens, exprs) {
-  let expr = Literal(value: value)
-  #(other_tokens, [expr, ..exprs])
-}
-
-fn parse_binary(tokens: List(Token), exprs, types, function) {
-  let [first_token, ..other_tokens] = tokens
-  let is_operator =
-    types
-    |> list.any(match(_, first_token))
-  case is_operator {
-    True -> {
-      let #(latest_expr, earlier_exprs) = case exprs {
-        [] -> #(Expr, [])
-        [expr, ..earlier_exprs] -> #(expr, earlier_exprs)
-      }
-      case match(Minus, first_token), latest_expr {
-        True, Literal(value) -> {
-          case dynamic.float(value) {
-            Ok(_) ->
-              parse_binary_operator(
-                other_tokens,
-                latest_expr,
-                first_token,
-                earlier_exprs,
-                function,
-              )
-            // This is an edge case: if we get here, the minus sign is
-            // being used as a unary operator.
-            Error(_) -> unary(tokens, exprs)
-          }
-        }
-        // This is also a case of unary minus.
-        True, _ -> unary(tokens, exprs)
-        False, _ ->
-          parse_binary_operator(
-            other_tokens,
-            latest_expr,
-            first_token,
-            earlier_exprs,
-            function,
-          )
-      }
-    }
-    False -> function(tokens, exprs)
-  }
-}
-
-fn match(token_type, token: Token) {
-  token.token_type == token_type
-}
-
-fn parse_binary_operator(tokens, left, first, exprs, function) {
-  let #(new_tokens, [right_expr, ..other_exprs]) = function(tokens, exprs)
-  let expr = Binary(left: left, operator: first, right: right_expr)
-  #(new_tokens, [expr, ..other_exprs])
-}
-
-fn parse_unary(tokens, exprs, operator) {
-  let #(new_tokens, [right_expr, ..other_exprs]) = unary(tokens, exprs)
-  let expr = Unary(operator: operator, right: right_expr)
-  #(new_tokens, [expr, ..other_exprs])
+fn match(token: Token, types: List(TokenType)) -> Bool {
+  list.any(types, fn(type_to_match) { token.token_type == type_to_match })
 }

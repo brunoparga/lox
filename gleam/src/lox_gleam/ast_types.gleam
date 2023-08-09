@@ -1,10 +1,9 @@
 import gleam/dynamic
-import lox_gleam/token.{Token}
+import lox_gleam/token_type.{TokenType}
 
 pub type Expr {
-  Expr
-  Binary(left: Expr, operator: Token, right: Expr)
-  Grouping(expression: Expr)
-  Literal(value: dynamic.Dynamic)
-  Unary(operator: Token, right: Expr)
+  Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
+  Grouping(expression: Expr, line: Int)
+  Literal(value: dynamic.Dynamic, line: Int)
+  Unary(operator: TokenType, right: Expr, line: Int)
 }
