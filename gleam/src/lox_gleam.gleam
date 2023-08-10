@@ -16,7 +16,7 @@ import lox_gleam/interpreter
 import lox_gleam/parser
 import lox_gleam/scanner
 
-pub fn main() -> error.LoxResult(String) {
+pub fn main() -> String {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
@@ -26,13 +26,13 @@ pub fn main() -> error.LoxResult(String) {
 
 fn run_prompt() {
   io.println("Welcome to the Lox REPL.")
-  io.println("Enter Lox code to be evaluated, or hit Ctrl+C twice to exit")
+  io.print("Enter Lox code to be evaluated, or hit Ctrl+C twice to exit.\n> ")
   do_run_prompt()
-  Ok("Leaving Lox REPL.")
+  io.debug("Leaving Lox REPL.")
 }
 
 fn do_run_prompt() {
-  let assert Ok(line) = erlang.get_line("> ")
+  let assert Ok(line) = erlang.get_line("")
   let _ = run(string.trim(line))
   do_run_prompt()
 }
@@ -46,21 +46,22 @@ fn run_file(filename: String) {
 }
 
 pub fn run(source: String) {
-  // let result =
-  source
-  |> scanner.scan()
-  |> parser.parse()
-  |> interpreter.interpret()
-  |> io.debug()
-  |> string.inspect
-  |> Ok()
-  // case result {
-  //   Ok(expr) -> {
-  //     expr
-  //     |> ast_printer.print()
-  //     |> io.debug()
-  //     |> Ok()
-  //   }
-  //   Error(error_type) -> error.handle_error(error_type)
-  // }
+  let result =
+    source
+    |> scanner.scan()
+    |> parser.parse()
+  case result {
+    Ok(expr) -> {
+      expr
+      |> ast_printer.print()
+
+      let value = expr
+      |> interpreter.interpret()
+
+      io.print(value <> "\n> ")
+
+      value
+    }
+    Error(error_type) -> error.handle_error(error_type)
+  }
 }

@@ -3,136 +3,167 @@
 //// since the AST contains only expressions, all the interpreter does
 //// is calculate the value of the expression.
 
-import gleam/dynamic
-import gleam/io
-import lox_gleam/ast_printer
+import gleam/dynamic.{Dynamic}
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/string
 import lox_gleam/ast_types.{Binary, Grouping, Literal, Unary}
+import lox_gleam/error.{LoxError, RuntimeError}
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
   Plus, Slash, Star, TokenType,
 }
 
-pub fn interpret(expression) {
-  case expression {
-    Ok(expr) -> {
-      ast_printer.print(expr) |> io.println()
-      evaluate(expr)
-    }
-    Error(_reason) -> dynamic.from(Nil)
+pub fn interpret(expression) -> String {
+  case evaluate(expression) {
+    Ok(value) -> string.inspect(value)
+    Error(RuntimeError(message, ..)) -> message
   }
 }
 
-fn evaluate(expression) {
+fn evaluate(expression) -> Result(Dynamic, LoxError) {
   case expression {
-    Literal(value, ..) -> value
+    Literal(value, ..) -> Ok(value)
     Grouping(expression, ..) -> evaluate(expression)
     Unary(operator, right, ..) -> evaluate_unary(operator, right)
     Binary(operator, left, right, ..) -> evaluate_binary(operator, left, right)
-    _ -> dynamic.from(Nil)
+    _ -> Error(RuntimeError(message: "unexpected expression found.", values: []))
   }
 }
 
-fn evaluate_unary(operator: TokenType, right_expr) {
-  let assert value = evaluate(right_expr)
+fn evaluate_unary(operator: TokenType, right_expr) -> Result(Dynamic, LoxError) {
+  let assert Ok(value) = evaluate(right_expr)
   case operator {
-    Bang -> dynamic.from(!is_truthy(value))
+    Bang -> Ok(dynamic.from(!is_truthy(value)))
     Minus -> {
       let assert Ok(number) = dynamic.float(value)
-      dynamic.from(0.0 -. number)
+      Ok(dynamic.from(0.0 -. number))
     }
-    // Unreachable, included to satisfy the compiler.
-    _ -> dynamic.from(Nil)
+    _ -> Error(RuntimeError(message: "", values: [value]))
   }
 }
 
-fn evaluate_binary(operator, left_expr, right_expr) {
-  let assert left_value = evaluate(left_expr)
-  let assert right_value = evaluate(right_expr)
-  // Hey, we decided to implement a dynamic language on top a static one
-  // (which itself runs on top of dynamic ones). We brought this upon
-  // ourselves, right?
-  let #(left_is_number, left_number) = case dynamic.float(left_value) {
-    Ok(number) -> #(True, number)
-    Error(_) -> #(False, 0.0)
-  }
-  let #(right_is_number, right_number) = case dynamic.float(right_value) {
-    Ok(number) -> #(True, number)
-    Error(_) -> #(False, 0.0)
-  }
-  let #(left_is_string, left_string) = case dynamic.string(left_value) {
-    Ok(string) -> #(True, string)
-    Error(_) -> #(False, "")
-  }
-  let #(right_is_string, right_string) = case dynamic.string(right_value) {
-    Ok(string) -> #(True, string)
-    Error(_) -> #(False, "")
-  }
+fn evaluate_binary(operator, left_expr, right_expr) -> Result(Dynamic, LoxError) {
+  let assert Ok(left_value) = evaluate(left_expr)
+  let assert Ok(right_value) = evaluate(right_expr)
+  // Some binary operators take only certain types.
+  let numbers = unpack_values(dynamic.float, left_value, right_value)
+  let strings = unpack_values(dynamic.string, left_value, right_value)
   // Evaluate the binary operators.
   case operator {
-    BangEqual -> dynamic.from(!{ left_value == right_value })
-    EqualEqual -> dynamic.from({ left_value == right_value })
+    BangEqual -> Ok(dynamic.from(!{ left_value == right_value }))
+    EqualEqual -> Ok(dynamic.from({ left_value == right_value }))
     Greater -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number >. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number >. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     GreaterEqual -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number >=. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number >=. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     Less -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number <. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number <. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     LessEqual -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number <=. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number <=. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     Minus -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number -. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number -. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     Plus -> {
-      case left_is_number, right_is_number, left_is_string, right_is_string {
-        True, True, False, False -> dynamic.from(left_number +. right_number)
-        False, False, True, True -> dynamic.from(left_string <> right_string)
-        // Throw a RuntimeError later
-        _, _, _, _ -> dynamic.from(Nil)
+      case numbers, strings {
+        Some([left_number, right_number]), None ->
+          Ok(dynamic.from(left_number +. right_number))
+        None, Some([left_string, right_string]) ->
+          Ok(dynamic.from(left_string <> right_string))
+        _, _ ->
+          Error(RuntimeError(
+            message: "binary operator Plus takes either two numbers or two strings.",
+            values: [left_value, right_value],
+          ))
       }
     }
+
     Slash -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number /. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number /. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
     Star -> {
-      case left_is_number, right_is_number {
-        True, True -> dynamic.from(left_number *. right_number)
-        // Throw a RuntimeError later
-        _, _ -> dynamic.from(Nil)
+      case numbers {
+        Some([left_number, right_number]) ->
+          Ok(dynamic.from(left_number *. right_number))
+        None ->
+          Error(RuntimeError(
+            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            values: [left_value, right_value],
+          ))
       }
     }
-    _ -> dynamic.from(Nil)
+    _ ->
+      Error(RuntimeError(
+        message: "unrecognized token " <> string.inspect(operator) <> " in binary expression.",
+        values: [left_value, right_value],
+      ))
   }
 }
 
-fn is_truthy(value) {
+fn unpack_values(function, left_value, right_value) {
+  option.all(list.map(
+    [left_value, right_value],
+    fn(value) {
+      value
+      |> function
+      |> option.from_result
+    },
+  ))
+}
+
+fn is_truthy(value) -> Bool {
   let is_nil = value == dynamic.from(Nil)
   let is_false = value == dynamic.from(False)
   !is_nil && !is_false

@@ -18,7 +18,13 @@ type ExprsAndTokens =
 pub fn parse(scan_result: LoxResult(List(Token))) -> LoxResult(Expr) {
   case scan_result {
     Ok(tokens) -> do_parse(tokens)
-    Error(error.ScanError(..) as error) -> Error(error)
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_parse(tokens) {
+  case expression(tokens) {
+    Ok(#(expr, _consumed)) -> Ok(expr)
     Error(error) -> handle_error(error)
   }
 }
@@ -40,13 +46,6 @@ fn handle_error(error) {
       }
     }
     _ -> Error(error)
-  }
-}
-
-fn do_parse(tokens) {
-  case expression(tokens) {
-    Ok(#(expr, _consumed)) -> Ok(expr)
-    Error(error) -> Error(error)
   }
 }
 

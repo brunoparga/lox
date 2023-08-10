@@ -1,8 +1,10 @@
 //// Define all the possible error types in the application and a function
 //// to print them.
 
+import gleam/dynamic
 import gleam/int
 import gleam/io
+import gleam/string
 import lox_gleam/token.{Token}
 import lox_gleam/ast_types.{Expr}
 
@@ -10,7 +12,7 @@ pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
   ParseError(message: String, line: Int, tokens: List(Token), exprs: List(Expr))
-  RuntimeError(message: String, token: Token)
+  RuntimeError(message: String, values: List(dynamic.Dynamic))
   ScanError(message: String, line: Int)
   ScanInvalidNumberError
   ScanUnexpectedEOFError
@@ -25,6 +27,7 @@ pub fn handle_error(error_type) {
     ErlangError(message) -> "Erlang error when opening file: " <> message <> "."
     ParseError(message, line, ..) ->
       "Parse error on line " <> int.to_string(line) <> ": " <> message
+    RuntimeError(message, values) -> "Runtime error: " <> message <> string.inspect(values)
     ScanError(message, line) ->
       "Scan error on line " <> int.to_string(line) <> ": " <> message
     TooManyArgumentsError ->
@@ -32,5 +35,5 @@ pub fn handle_error(error_type) {
     _ -> ""
   }
   io.println_error(message)
-  Error(error_type)
+  message
 }
