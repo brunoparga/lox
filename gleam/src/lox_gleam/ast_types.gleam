@@ -1,6 +1,11 @@
 import gleam/dynamic
 import lox_gleam/token_type.{TokenType}
 
+pub type Stmt {
+  PrintStmt(expression: Expr)
+  ExprStmt(expression: Expr)
+}
+
 pub type Expr {
   Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
   Grouping(expression: Expr, line: Int)

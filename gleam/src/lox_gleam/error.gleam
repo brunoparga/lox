@@ -6,12 +6,18 @@ import gleam/int
 import gleam/io
 import gleam/string
 import lox_gleam/token.{Token}
-import lox_gleam/ast_types.{Expr}
+import lox_gleam/ast_types.{Expr, Stmt}
 
 pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
-  ParseError(message: String, line: Int, tokens: List(Token), exprs: List(Expr))
+  ParseError(
+    message: String,
+    line: Int,
+    tokens: List(Token),
+    exprs: List(Expr),
+    stmts: List(Stmt),
+  )
   RuntimeError(message: String, values: List(dynamic.Dynamic))
   ScanError(message: String, line: Int)
   ScanInvalidNumberError
@@ -25,9 +31,14 @@ pub type LoxResult(t) =
 pub fn handle_error(error_type) {
   let message = case error_type {
     ErlangError(message) -> "Erlang error when opening file: " <> message <> "."
-    ParseError(message, line, ..) ->
-      "Parse error on line " <> int.to_string(line) <> ": " <> message
-    RuntimeError(message, values) -> "Runtime error: " <> message <> string.inspect(values)
+    ParseError(message, line, tokens, exprs, stmts) ->
+      "Parse error on line " <> int.to_string(line) <> ": " <> message <> "\nTokens left to parse: " <> string.inspect(
+        tokens,
+      ) <> "\nExpressions parsed: " <> string.inspect(exprs) <> "\nStatements parsed: " <> string.inspect(
+        stmts,
+      )
+    RuntimeError(message, values) ->
+      "Runtime error: " <> message <> string.inspect(values)
     ScanError(message, line) ->
       "Scan error on line " <> int.to_string(line) <> ": " <> message
     TooManyArgumentsError ->
@@ -35,5 +46,7 @@ pub fn handle_error(error_type) {
     _ -> ""
   }
   io.println_error(message)
-  message
+  // This function is called in the same place as others which return lists.
+  // Therefore, this one does too. Taipchenk.
+  []
 }

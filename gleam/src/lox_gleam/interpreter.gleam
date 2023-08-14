@@ -4,20 +4,57 @@
 //// is calculate the value of the expression.
 
 import gleam/dynamic.{Dynamic}
+import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import lox_gleam/ast_types.{Binary, Grouping, Literal, Unary}
-import lox_gleam/error.{LoxError, RuntimeError}
+import lox_gleam/ast_types.{
+  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
+}
+import lox_gleam/error.{LoxError, LoxResult, RuntimeError}
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
   Plus, Slash, Star, TokenType,
 }
 
-pub fn interpret(expression) -> String {
-  case evaluate(expression) {
-    Ok(value) -> string.inspect(value)
-    Error(RuntimeError(message, ..)) -> message
+pub fn interpret(statements: List(Stmt)) -> List(Stmt) {
+  case execute(statements) {
+    Ok([]) -> []
+    Error(error) -> error.handle_error(error)
+  }
+}
+
+fn execute(statements) {
+  case do_execute(statements) {
+    Ok([]) -> Ok([])
+    Ok(new_statements) -> do_execute(new_statements)
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_execute(statements) -> LoxResult(List(Stmt)) {
+  case statements {
+    [] -> Ok([])
+    [statement, ..new_statements] ->
+      case statement {
+        ExprStmt(expression: expression) -> {
+          case evaluate(expression) {
+            Ok(_value) -> do_execute(new_statements)
+            Error(error) -> Error(error)
+          }
+        }
+        PrintStmt(expression: expression) -> {
+          case evaluate(expression) {
+            Ok(value) -> {
+              value
+              |> string.inspect()
+              |> io.println()
+              do_execute(new_statements)
+            }
+            Error(error) -> Error(error)
+          }
+        }
+      }
   }
 }
 
@@ -27,7 +64,8 @@ fn evaluate(expression) -> Result(Dynamic, LoxError) {
     Grouping(expression, ..) -> evaluate(expression)
     Unary(operator, right, ..) -> evaluate_unary(operator, right)
     Binary(operator, left, right, ..) -> evaluate_binary(operator, left, right)
-    _ -> Error(RuntimeError(message: "unexpected expression found.", values: []))
+    _ ->
+      Error(RuntimeError(message: "unexpected expression found.", values: []))
   }
 }
 

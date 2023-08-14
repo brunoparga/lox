@@ -18,10 +18,9 @@ import lox_gleam/token_type.{
 }
 
 pub fn scan(source) {
-  let reversed_tokens = do_scan(source, [], 1)
-  case reversed_tokens {
-    Ok(tokens) -> Ok(list.reverse(tokens))
-    Error(error) -> Error(error)
+  case do_scan(source, [], 1) {
+    Ok(tokens) -> list.reverse(tokens)
+    Error(error) -> error.handle_error(error)
   }
 }
 
@@ -177,7 +176,7 @@ fn add_string_token(source, literal, tokens, line) {
   let token =
     Token(
       token_type: LoxString,
-      lexeme: "'" <> literal <> "'",
+      lexeme: literal,
       literal: dynamic.from(literal),
       line: line,
     )
