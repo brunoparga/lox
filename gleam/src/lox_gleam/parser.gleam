@@ -24,7 +24,7 @@ type StmtsAndTokens =
 pub fn parse(tokens: List(Token)) -> List(Stmt) {
   case declaration(Ok(#([], tokens))) {
     Ok(#(statements, [])) -> list.reverse(statements)
-    Ok(#(statements, [Token(line: line, ..)] as tokens)) ->
+    Ok(#(statements, [Token(line: line, ..)] as tokens)) -> {
       error.handle_error(ParseError(
         message: "unexpected end of tokens.",
         exprs: [],
@@ -32,7 +32,9 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
         stmts: statements,
         tokens: tokens,
       ))
-    Ok(#(statements, tokens)) ->
+      []
+    }
+    Ok(#(statements, tokens)) -> {
       error.handle_error(ParseError(
         message: "parser failed to parse all tokens.",
         exprs: [],
@@ -40,7 +42,12 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
         stmts: statements,
         tokens: tokens,
       ))
-    Error(error) -> error.handle_error(error)
+      []
+    }
+    Error(error) -> {
+      error.handle_error(error)
+      []
+    }
   }
 }
 
@@ -96,7 +103,7 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
     Semicolon -> {
       let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
       let var_statement =
-        VarStmt(name: variable_name.lexeme, expression: nil_expr)
+        VarStmt(name: variable_name.lexeme, initializer: nil_expr)
       declaration(Ok(#([var_statement, ..statements], new_tokens)))
     }
     _ ->
@@ -115,7 +122,7 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
     Ok(#(expr, [semicolon, ..new_tokens])) -> {
       case semicolon.token_type {
         Semicolon -> {
-          let var_statement = VarStmt(name: name, expression: expr)
+          let var_statement = VarStmt(name: name, initializer: expr)
           declaration(Ok(#([var_statement, ..statements], new_tokens)))
         }
         _ ->

@@ -20,7 +20,10 @@ import lox_gleam/token_type.{
 pub fn scan(source) {
   case do_scan(source, [], 1) {
     Ok(tokens) -> list.reverse(tokens)
-    Error(error) -> error.handle_error(error)
+    Error(error) -> {
+      error.handle_error(error)
+      []
+    }
   }
 }
 

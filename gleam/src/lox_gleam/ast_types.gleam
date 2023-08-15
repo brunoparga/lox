@@ -4,7 +4,7 @@ import lox_gleam/token_type.{TokenType}
 pub type Stmt {
   PrintStmt(expression: Expr)
   ExprStmt(expression: Expr)
-  VarStmt(name: String, expression: Expr)
+  VarStmt(name: String, initializer: Expr)
 }
 
 pub type Expr {

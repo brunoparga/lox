@@ -4,6 +4,7 @@
 import gleam/dynamic
 import gleam/int
 import gleam/io
+import gleam/map
 import gleam/string
 import lox_gleam/token.{Token}
 import lox_gleam/ast_types.{Expr, Stmt}
@@ -46,7 +47,7 @@ pub fn handle_error(error_type) {
     _ -> ""
   }
   io.println_error(message)
-  // This function is called in the same place as others which return lists.
+  // This function is called in the same place as others which return maps.
   // Therefore, this one does too. Taipchenk.
-  []
+  map.new()
 }

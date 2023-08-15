@@ -1,7 +1,5 @@
 //// Expose `interpret`, which takes an abstract syntax tree and
-//// processes it accoding to the rules of the Lox language. Initially,
-//// since the AST contains only expressions, all the interpreter does
-//// is calculate the value of the expression.
+//// processes it accoding to the rules of the Lox language.
 
 import gleam/dynamic.{Dynamic}
 import gleam/io
@@ -9,82 +7,118 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import lox_gleam/ast_types.{
-  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
+  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt, Variable,
 }
+import lox_gleam/environment.{Environment}
 import lox_gleam/error.{LoxError, LoxResult, RuntimeError}
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
   Plus, Slash, Star, TokenType,
 }
 
-pub fn interpret(statements: List(Stmt)) -> List(Stmt) {
-  case execute(statements) {
-    Ok([]) -> []
+pub fn interpret(statements: List(Stmt), environment) -> Environment {
+  case execute(statements, environment) {
+    Ok(#([], new_environment)) -> new_environment
     Error(error) -> error.handle_error(error)
   }
 }
 
-fn execute(statements) {
-  case do_execute(statements) {
-    Ok([]) -> Ok([])
-    Ok(new_statements) -> do_execute(new_statements)
+fn execute(statements, environment) {
+  case do_execute(statements, environment) {
+    Ok(#([], env)) -> Ok(#([], env))
+    Ok(#(new_statements, environment)) ->
+      do_execute(new_statements, environment)
     Error(error) -> Error(error)
   }
 }
 
-fn do_execute(statements) -> LoxResult(List(Stmt)) {
+fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) {
   case statements {
-    [] -> Ok([])
-    [statement, ..new_statements] ->
+    [] -> Ok(#([], environment))
+    _ -> {
+      let [statement, ..other_statements] = statements
       case statement {
-        ExprStmt(expression: expression) -> {
-          case evaluate(expression) {
-            Ok(_value) -> do_execute(new_statements)
-            Error(error) -> Error(error)
-          }
-        }
-        PrintStmt(expression: expression) -> {
-          case evaluate(expression) {
-            Ok(value) -> {
-              value
-              |> string.inspect()
-              |> io.println()
-              do_execute(new_statements)
-            }
-            Error(error) -> Error(error)
-          }
-        }
-        VarStmt(..) -> Error(error.NotImplementedError)
+        ExprStmt(expression: expression) ->
+          expression_stmt(expression, other_statements, environment)
+        PrintStmt(expression: expression) ->
+          print_stmt(expression, other_statements, environment)
+        VarStmt(name, initializer) ->
+          variable_stmt(name, initializer, other_statements, environment)
       }
+    }
   }
 }
 
-fn evaluate(expression) -> Result(Dynamic, LoxError) {
+fn expression_stmt(expression, statements, environment) {
+  case evaluate(expression, environment) {
+    Ok(_value) -> do_execute(statements, environment)
+    Error(error) -> Error(error)
+  }
+}
+
+fn print_stmt(expression, statements, environment) {
+  case evaluate(expression, environment) {
+    Ok(value) -> {
+      value
+      |> string.inspect()
+      |> io.println()
+      do_execute(statements, environment)
+    }
+    Error(error) -> Error(error)
+  }
+}
+
+fn variable_stmt(name, initializer, statements, environment) {
+  case evaluate(initializer, environment) {
+    Ok(value) -> {
+      let new_environment = environment.define(environment, name, value)
+      do_execute(statements, new_environment)
+    }
+    Error(error) -> Error(error)
+  }
+}
+
+fn evaluate(expression, environment) -> Result(Dynamic, LoxError) {
   case expression {
     Literal(value, ..) -> Ok(value)
-    Grouping(expression, ..) -> evaluate(expression)
-    Unary(operator, right, ..) -> evaluate_unary(operator, right)
-    Binary(operator, left, right, ..) -> evaluate_binary(operator, left, right)
+    Grouping(expression, ..) -> evaluate(expression, environment)
+    Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
+    Binary(operator, left, right, ..) ->
+      evaluate_binary(operator, left, right, environment)
+    Variable(name) -> environment.get(environment, name)
     _ ->
       Error(RuntimeError(message: "unexpected expression found.", values: []))
   }
 }
 
-fn evaluate_unary(operator: TokenType, right_expr) -> Result(Dynamic, LoxError) {
-  let assert Ok(value) = evaluate(right_expr)
+fn evaluate_unary(
+  operator: TokenType,
+  right_expr,
+  environment,
+) -> Result(Dynamic, LoxError) {
+  let assert Ok(value) = evaluate(right_expr, environment)
   case operator {
     Bang -> Ok(dynamic.from(!is_truthy(value)))
     Minus -> {
       let assert Ok(number) = dynamic.float(value)
       Ok(dynamic.from(0.0 -. number))
     }
-    _ -> Error(RuntimeError(message: "", values: [value]))
+    _ ->
+      Error(RuntimeError(
+        message: "unexpected operator in unary expression.",
+        values: [value],
+      ))
   }
 }
 
-fn evaluate_binary(operator, left_expr, right_expr) -> Result(Dynamic, LoxError) {
-  let assert Ok(left_value) = evaluate(left_expr)
-  let assert Ok(right_value) = evaluate(right_expr)
+fn evaluate_binary(
+  operator,
+  left_expr,
+  right_expr,
+  environment,
+) -> Result(Dynamic, LoxError) {
+  let assert Ok(left_value) = evaluate(left_expr, environment)
+  let assert Ok(right_value) = evaluate(right_expr, environment)
   // Some binary operators take only certain types.
   let numbers = unpack_values(dynamic.float, left_value, right_value)
   let strings = unpack_values(dynamic.string, left_value, right_value)
