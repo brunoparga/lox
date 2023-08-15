@@ -14,7 +14,7 @@ import lox_gleam/token_type.{
   Semicolon, Slash, Star, TokenType,
 }
 
-type ExprsAndTokens =
+type ExprAndTokens =
   #(Expr, List(Token))
 
 type StmtsAndTokens =
@@ -40,34 +40,6 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
         tokens: tokens,
       ))
     Error(error) -> error.handle_error(error)
-  }
-}
-
-// Catch as many parse errors as we can in one fell swoop.
-fn group_errors(error) {
-  case error {
-    ParseError(
-      message: message,
-      line: line,
-      exprs: exprs,
-      tokens: tokens,
-      stmts: statements,
-    ) -> {
-      case tokens {
-        [] -> Error(error)
-        _ -> {
-          let assert Ok(#(new_expr, other_tokens)) = expression(tokens)
-          group_errors(ParseError(
-            message: message,
-            line: line,
-            exprs: [new_expr, ..exprs],
-            stmts: statements,
-            tokens: other_tokens,
-          ))
-        }
-      }
-    }
-    _ -> Error(error)
   }
 }
 
@@ -107,35 +79,35 @@ fn do_statement(statements, tokens: List(Token)) {
   }
 }
 
-fn expression(tokens) -> LoxResult(ExprsAndTokens) {
+fn expression(tokens) -> LoxResult(ExprAndTokens) {
   equality(tokens)
 }
 
-fn equality(tokens) -> LoxResult(ExprsAndTokens) {
+fn equality(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> comparison()
   |> binary_inner([BangEqual, EqualEqual], comparison)
 }
 
-fn comparison(tokens) -> LoxResult(ExprsAndTokens) {
+fn comparison(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> term()
   |> binary_inner([Greater, GreaterEqual, Less, LessEqual], term)
 }
 
-fn term(tokens) -> LoxResult(ExprsAndTokens) {
+fn term(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> factor()
   |> binary_inner([Minus, Plus], factor)
 }
 
-fn factor(tokens) -> LoxResult(ExprsAndTokens) {
+fn factor(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> unary()
   |> binary_inner([Slash, Star], unary)
 }
 
-fn unary(tokens) -> LoxResult(ExprsAndTokens) {
+fn unary(tokens) -> LoxResult(ExprAndTokens) {
   let [first_token, ..tokens1] = tokens
   case match(first_token, [Bang, Minus]) {
     True -> {
@@ -152,7 +124,7 @@ fn unary(tokens) -> LoxResult(ExprsAndTokens) {
   }
 }
 
-fn primary(tokens: List(Token)) -> LoxResult(ExprsAndTokens) {
+fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     LoxFalse ->
@@ -217,7 +189,7 @@ fn match(token: Token, types: List(TokenType)) -> Bool {
 }
 
 fn binary_inner(types, function) {
-  fn(expr_and_tokens) -> LoxResult(ExprsAndTokens) {
+  fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
     case expr_and_tokens {
       Ok(#(expr, tokens)) -> happy_path(types, function)(expr, tokens)
       Error(error) -> Error(error)
@@ -244,5 +216,33 @@ fn build_binary(types, function, left, first_token, other_tokens) {
       binary_inner(types, function)(Ok(#(binary, tokens2)))
     }
     Error(error) -> Error(error)
+  }
+}
+
+// Catch as many parse errors as we can in one fell swoop.
+fn group_errors(error) {
+  case error {
+    ParseError(
+      message: message,
+      line: line,
+      exprs: exprs,
+      tokens: tokens,
+      stmts: statements,
+    ) -> {
+      case tokens {
+        [] -> Error(error)
+        _ -> {
+          let assert Ok(#(new_expr, other_tokens)) = expression(tokens)
+          group_errors(ParseError(
+            message: message,
+            line: line,
+            exprs: [new_expr, ..exprs],
+            stmts: statements,
+            tokens: other_tokens,
+          ))
+        }
+      }
+    }
+    _ -> Error(error)
   }
 }
