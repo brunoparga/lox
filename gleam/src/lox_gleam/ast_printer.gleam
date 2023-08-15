@@ -17,6 +17,7 @@ fn build_string(expr) {
     ast_types.Literal(value, _line) ->
       string_builder.from_string(" " <> string.inspect(value))
     ast_types.Unary(operator, right, _line) -> print_unary(operator, right)
+    ast_types.Variable(name) -> string_builder.from_string(name)
   }
 }
 

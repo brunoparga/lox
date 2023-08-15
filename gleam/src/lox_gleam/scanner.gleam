@@ -59,7 +59,7 @@ fn scan_tokens(source, tokens, line) {
     _ -> {
       case is_digit(char), is_alpha(char) {
         True, False -> add_number(source, tokens, line)
-        False, True -> add_identifier(source, tokens, line)
+        False, True -> add_text_based(source, tokens, line)
         False, False ->
           Error(error.ScanError("unexpected character.", line: line))
       }
@@ -262,7 +262,9 @@ fn is_alphanumeric(char) {
   is_alpha(char) || is_digit(char)
 }
 
-fn add_identifier(source, tokens, line) {
+// Handle identifiers and also tokens like "print" or "return", whose
+// text field is alphanumeric
+fn add_text_based(source, tokens, line) {
   let result = identifier_text("", source)
   case result {
     Ok(#(text, new_source)) -> {

@@ -4,14 +4,15 @@
 import gleam/dynamic
 import gleam/list
 import lox_gleam/ast_types.{
-  Binary, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
+  Binary, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
+  Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  Bang, BangEqual, Eof, EqualEqual, Greater, GreaterEqual, LeftParen, Less,
-  LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue, Minus, Number, Plus, Print,
-  Semicolon, Slash, Star, TokenType,
+  Bang, BangEqual, Eof, Equal, EqualEqual, Greater, GreaterEqual, Identifier,
+  LeftParen, Less, LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue, Minus,
+  Number, Plus, Print, Semicolon, Slash, Star, TokenType, Var,
 }
 
 type ExprAndTokens =
@@ -21,7 +22,7 @@ type StmtsAndTokens =
   #(List(Stmt), List(Token))
 
 pub fn parse(tokens: List(Token)) -> List(Stmt) {
-  case statement(Ok(#([], tokens))) {
+  case declaration(Ok(#([], tokens))) {
     Ok(#(statements, [])) -> list.reverse(statements)
     Ok(#(statements, [Token(line: line, ..)] as tokens)) ->
       error.handle_error(ParseError(
@@ -43,9 +44,7 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
   }
 }
 
-fn statement(
-  stmts_and_tokens: LoxResult(StmtsAndTokens),
-) -> LoxResult(StmtsAndTokens) {
+fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
     Ok(#(statements, [one_token])) -> {
@@ -57,12 +56,83 @@ fn statement(
         tokens: [one_token],
       ))
     }
-    Ok(#(statements, tokens)) -> do_statement(statements, tokens)
+    Ok(#(statements, tokens)) -> do_declaration(statements, tokens)
     Error(error) -> group_errors(error)
   }
 }
 
-fn do_statement(statements, tokens: List(Token)) {
+fn do_declaration(statements, tokens: List(Token)) {
+  let [first_token, ..other_tokens] = tokens
+  case first_token.token_type {
+    Var -> var_declaration(statements, other_tokens)
+    _ -> statement(statements, tokens)
+  }
+}
+
+fn var_declaration(statements, tokens: List(Token)) {
+  let [variable_name, ..tokens1] = tokens
+  case variable_name.token_type {
+    Identifier -> do_var_declaration(variable_name, statements, tokens1)
+    _ ->
+      Error(ParseError(
+        message: "expect variable name.",
+        line: variable_name.line,
+        exprs: [],
+        stmts: statements,
+        tokens: tokens,
+      ))
+  }
+}
+
+fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
+  let [maybe_equal, ..new_tokens] = tokens
+  case maybe_equal.token_type {
+    Equal ->
+      var_declaration_with_assignment(
+        variable_name.lexeme,
+        statements,
+        new_tokens,
+      )
+    Semicolon -> {
+      let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
+      let var_statement =
+        VarStmt(name: variable_name.lexeme, expression: nil_expr)
+      declaration(Ok(#([var_statement, ..statements], new_tokens)))
+    }
+    _ ->
+      Error(ParseError(
+        message: "a variable declaration must be followed by an assignment or ';'.",
+        line: maybe_equal.line,
+        exprs: [],
+        stmts: statements,
+        tokens: tokens,
+      ))
+  }
+}
+
+fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
+  case expression(tokens) {
+    Ok(#(expr, [semicolon, ..new_tokens])) -> {
+      case semicolon.token_type {
+        Semicolon -> {
+          let var_statement = VarStmt(name: name, expression: expr)
+          declaration(Ok(#([var_statement, ..statements], new_tokens)))
+        }
+        _ ->
+          Error(ParseError(
+            message: "a variable declaration with assignment must be followed by ';'.",
+            line: semicolon.line,
+            exprs: [],
+            stmts: statements,
+            tokens: new_tokens,
+          ))
+      }
+    }
+    Error(error) -> Error(error)
+  }
+}
+
+fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
   let #(stmt_type, tokens1) = case first_token.token_type {
     Print -> {
@@ -73,7 +143,7 @@ fn do_statement(statements, tokens: List(Token)) {
   case expression(tokens1) {
     Ok(#(expr, [Token(token_type: Semicolon, ..), ..tokens2])) -> {
       let new_statement = stmt_type(expr)
-      statement(Ok(#([new_statement, ..statements], tokens2)))
+      declaration(Ok(#([new_statement, ..statements], tokens2)))
     }
     Error(error) -> Error(error)
   }
@@ -150,6 +220,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
         ),
         other_tokens,
       ))
+    Identifier -> Ok(#(Variable(name: first_token.lexeme), other_tokens))
     LeftParen -> {
       case expression(other_tokens) {
         Ok(#(inner_expr, [Token(lexeme: ")", ..), ..tokens2])) -> {

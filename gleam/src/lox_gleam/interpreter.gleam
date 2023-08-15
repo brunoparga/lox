@@ -9,7 +9,7 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import lox_gleam/ast_types.{
-  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
+  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
 }
 import lox_gleam/error.{LoxError, LoxResult, RuntimeError}
 import lox_gleam/token_type.{
@@ -54,6 +54,7 @@ fn do_execute(statements) -> LoxResult(List(Stmt)) {
             Error(error) -> Error(error)
           }
         }
+        VarStmt(..) -> Error(error.NotImplementedError)
       }
   }
 }
