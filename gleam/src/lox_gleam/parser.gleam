@@ -4,16 +4,16 @@
 import gleam/dynamic
 import gleam/list
 import lox_gleam/ast_types.{
-  Assign, Binary, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
-  VarStmt, Variable,
+  Assign, Binary, Block, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt,
+  Unary, VarStmt, Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   Bang, BangEqual, Eof, Equal, EqualEqual, Greater, GreaterEqual, Identifier,
-  LeftParen, Less, LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue, Minus,
-  Number, Plus, Print, Semicolon, Slash, Star, TokenType, Var,
+  LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue,
+  Minus, Number, Plus, Print, RightBrace, Semicolon, Slash, Star, TokenType, Var,
 }
 
 type ExprAndTokens =
@@ -64,16 +64,19 @@ fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
         tokens: [one_token],
       ))
     }
-    Ok(#(statements, tokens)) -> do_declaration(statements, tokens)
+    Ok(#(statements, tokens)) -> statement(statements, tokens)
     Error(error) -> group_errors(error)
   }
 }
 
-fn do_declaration(statements, tokens: List(Token)) {
+fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     Var -> var_declaration(statements, other_tokens)
-    _ -> statement(statements, tokens)
+    LeftBrace -> block(statements, other_tokens)
+    RightBrace -> Ok(#(statements, other_tokens))
+    Print -> do_statement(statements, other_tokens, PrintStmt)
+    _ -> do_statement(statements, tokens, ExprStmt)
   }
 }
 
@@ -135,18 +138,27 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
   }
 }
 
-fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
+fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
-  let #(stmt_type, tokens1) = case first_token.token_type {
-    Print -> {
-      #(PrintStmt, other_tokens)
+  case first_token.token_type {
+    Eof -> Error(error.NotImplementedError)
+    _ -> {
+      case declaration(Ok(#([], other_tokens))) {
+        Ok(#(block_statements, new_tokens)) -> {
+          let block = Block(list.reverse(block_statements))
+          declaration(Ok(#([block, ..existing_statements], new_tokens)))
+        }
+        Error(error) -> Error(error)
+      }
     }
-    _ -> #(ExprStmt, tokens)
   }
-  case expression(tokens1) {
-    Ok(#(expr, [Token(token_type: Semicolon, ..), ..tokens2])) -> {
+}
+
+fn do_statement(statements, tokens, stmt_type) {
+  case expression(tokens) {
+    Ok(#(expr, [Token(token_type: Semicolon, ..), ..new_tokens])) -> {
       let new_statement = stmt_type(expr)
-      declaration(Ok(#([new_statement, ..statements], tokens2)))
+      declaration(Ok(#([new_statement, ..statements], new_tokens)))
     }
     Error(error) -> Error(error)
   }

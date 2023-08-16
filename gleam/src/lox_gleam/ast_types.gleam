@@ -3,6 +3,7 @@ import lox_gleam/token.{Token}
 import lox_gleam/token_type.{TokenType}
 
 pub type Stmt {
+  Block(statements: List(Stmt))
   PrintStmt(expression: Expr)
   ExprStmt(expression: Expr)
   VarStmt(name: Token, initializer: Expr)

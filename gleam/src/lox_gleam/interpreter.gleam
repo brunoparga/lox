@@ -7,8 +7,8 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
-  Variable,
+  Assign, Binary, Block, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
+  VarStmt, Variable,
 }
 import lox_gleam/environment.{Environment}
 import lox_gleam/error.{LoxResult, RuntimeError}
@@ -46,6 +46,7 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
           print_stmt(expression, other_statements, environment)
         VarStmt(name, initializer) ->
           variable_stmt(name, initializer, other_statements, environment)
+        Block(..) -> Error(error.NotImplementedError)
       }
     }
   }
