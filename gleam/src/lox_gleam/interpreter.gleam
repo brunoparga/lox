@@ -10,7 +10,7 @@ import lox_gleam/ast_types.{
   Assign, Binary, Block, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
   VarStmt, Variable,
 }
-import lox_gleam/environment.{Environment}
+import lox_gleam/environment.{Environment, Global, Local}
 import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
@@ -27,7 +27,8 @@ pub fn interpret(statements: List(Stmt), environment) -> Environment {
 
 fn execute(statements, environment) {
   case do_execute(statements, environment) {
-    Ok(#([], env)) -> Ok(#([], env))
+    Ok(#([], Global(..) as env)) -> Ok(#([], env))
+    Ok(#([], Local(parent: parent, ..))) -> Ok(#([], parent))
     Ok(#(new_statements, environment)) ->
       do_execute(new_statements, environment)
     Error(error) -> Error(error)
@@ -46,7 +47,11 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
           print_stmt(expression, other_statements, environment)
         VarStmt(name, initializer) ->
           variable_stmt(name, initializer, other_statements, environment)
-        Block(..) -> Error(error.NotImplementedError)
+        Block(block_statements) -> {
+          let child_environment = environment.create(option.Some(environment))
+          execute(block_statements, child_environment)
+          execute(other_statements, environment)
+        }
       }
     }
   }

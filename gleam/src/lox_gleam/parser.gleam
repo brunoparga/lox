@@ -139,11 +139,11 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
 }
 
 fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
-  let [first_token, ..other_tokens] = tokens
+  let assert Ok(first_token) = list.first(tokens)
   case first_token.token_type {
     Eof -> Error(error.NotImplementedError)
     _ -> {
-      case declaration(Ok(#([], other_tokens))) {
+      case declaration(Ok(#([], tokens))) {
         Ok(#(block_statements, new_tokens)) -> {
           let block = Block(list.reverse(block_statements))
           declaration(Ok(#([block, ..existing_statements], new_tokens)))
