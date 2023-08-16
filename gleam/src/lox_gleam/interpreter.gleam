@@ -68,10 +68,11 @@ fn print_stmt(expression, statements, environment) {
   }
 }
 
-fn variable_stmt(name, initializer, statements, environment) {
+fn variable_stmt(name_token, initializer, statements, environment) {
   case evaluate(initializer, environment) {
     Ok(value) -> {
-      let new_environment = environment.define(environment, name, value)
+      let new_environment =
+        environment.define(environment, name_token.lexeme, value)
       do_execute(statements, new_environment)
     }
     Error(error) -> Error(error)
@@ -85,7 +86,7 @@ fn evaluate(expression, environment) -> Result(Dynamic, LoxError) {
     Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
     Binary(operator, left, right, ..) ->
       evaluate_binary(operator, left, right, environment)
-    Variable(name) -> environment.get(environment, name)
+    Variable(name_token) -> environment.get(environment, name_token.lexeme)
     _ ->
       Error(RuntimeError(message: "unexpected expression found.", values: []))
   }

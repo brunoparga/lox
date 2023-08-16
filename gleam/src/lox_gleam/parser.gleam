@@ -4,8 +4,8 @@
 import gleam/dynamic
 import gleam/list
 import lox_gleam/ast_types.{
-  Binary, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
-  Variable,
+  Assign, Binary, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary,
+  VarStmt, Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/token.{Token}
@@ -95,15 +95,10 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
   let [maybe_equal, ..new_tokens] = tokens
   case maybe_equal.token_type {
     Equal ->
-      var_declaration_with_assignment(
-        variable_name.lexeme,
-        statements,
-        new_tokens,
-      )
+      var_declaration_with_assignment(variable_name, statements, new_tokens)
     Semicolon -> {
       let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
-      let var_statement =
-        VarStmt(name: variable_name.lexeme, initializer: nil_expr)
+      let var_statement = VarStmt(name: variable_name, initializer: nil_expr)
       declaration(Ok(#([var_statement, ..statements], new_tokens)))
     }
     _ ->
@@ -157,7 +152,49 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
 }
 
 fn expression(tokens) -> LoxResult(ExprAndTokens) {
-  equality(tokens)
+  assignment(tokens)
+}
+
+fn assignment(tokens) -> LoxResult(ExprAndTokens) {
+  case equality(tokens) {
+    Ok(#(name_expr, [])) ->
+      Error(ParseError(
+        message: "unexpected end of tokens when assigning variable.",
+        exprs: [name_expr],
+        line: 0,
+        stmts: [],
+        tokens: tokens,
+      ))
+    Ok(#(name_expr, new_tokens)) -> do_assignment(name_expr, new_tokens)
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_assignment(name_expr, tokens) -> LoxResult(ExprAndTokens) {
+  let [equals, ..tokens1] = tokens
+  case equals.token_type {
+    Equal -> {
+      case assignment(tokens1) {
+        Ok(#(value_expr, tokens2)) -> {
+          case name_expr {
+            Variable(name: name) -> {
+              Ok(#(Assign(name: name, value: value_expr), tokens2))
+            }
+            _ ->
+              Error(ParseError(
+                message: "invalid assignment target.",
+                exprs: [name_expr],
+                stmts: [],
+                tokens: tokens,
+                line: equals.line,
+              ))
+          }
+        }
+        Error(error) -> Error(error)
+      }
+    }
+    _ -> Ok(#(name_expr, tokens))
+  }
 }
 
 fn equality(tokens) -> LoxResult(ExprAndTokens) {
@@ -227,7 +264,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
         ),
         other_tokens,
       ))
-    Identifier -> Ok(#(Variable(name: first_token.lexeme), other_tokens))
+    Identifier -> Ok(#(Variable(name: first_token), other_tokens))
     LeftParen -> {
       case expression(other_tokens) {
         Ok(#(inner_expr, [Token(lexeme: ")", ..), ..tokens2])) -> {
