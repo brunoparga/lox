@@ -7,10 +7,11 @@ import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
 import lox_gleam/ast_types.{
-  Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt, Variable,
+  Assign, Binary, ExprStmt, Grouping, Literal, PrintStmt, Stmt, Unary, VarStmt,
+  Variable,
 }
 import lox_gleam/environment.{Environment}
-import lox_gleam/error.{LoxError, LoxResult, RuntimeError}
+import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
   Plus, Slash, Star, TokenType,
@@ -51,18 +52,18 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
 
 fn expression_stmt(expression, statements, environment) {
   case evaluate(expression, environment) {
-    Ok(_value) -> do_execute(statements, environment)
+    Ok(#(_value, new_environment)) -> do_execute(statements, new_environment)
     Error(error) -> Error(error)
   }
 }
 
 fn print_stmt(expression, statements, environment) {
   case evaluate(expression, environment) {
-    Ok(value) -> {
+    Ok(#(value, new_environment)) -> {
       value
       |> string.inspect()
       |> io.println()
-      do_execute(statements, environment)
+      do_execute(statements, new_environment)
     }
     Error(error) -> Error(error)
   }
@@ -70,18 +71,20 @@ fn print_stmt(expression, statements, environment) {
 
 fn variable_stmt(name_token, initializer, statements, environment) {
   case evaluate(initializer, environment) {
-    Ok(value) -> {
-      let new_environment =
-        environment.define(environment, name_token.lexeme, value)
-      do_execute(statements, new_environment)
+    Ok(#(value, environment1)) -> {
+      let environment2 =
+        environment.define(environment1, name_token.lexeme, value)
+      do_execute(statements, environment2)
     }
     Error(error) -> Error(error)
   }
 }
 
-fn evaluate(expression, environment) -> Result(Dynamic, LoxError) {
+fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
   case expression {
-    Literal(value, ..) -> Ok(value)
+    Literal(value, ..) -> Ok(#(value, environment))
+    Assign(name: name_token, value: expr) ->
+      evaluate_assignment(name_token, expr, environment)
     Grouping(expression, ..) -> evaluate(expression, environment)
     Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
     Binary(operator, left, right, ..) ->
@@ -92,17 +95,33 @@ fn evaluate(expression, environment) -> Result(Dynamic, LoxError) {
   }
 }
 
+fn evaluate_assignment(
+  name_token,
+  expression,
+  environment,
+) -> LoxResult(#(Dynamic, Environment)) {
+  case evaluate(expression, environment) {
+    Ok(#(value, environment1)) -> {
+      case environment.assign(environment1, name_token, dynamic.from(value)) {
+        Ok(environment2) -> Ok(#(dynamic.from(value), environment2))
+        Error(error) -> Error(error)
+      }
+    }
+    Error(error) -> Error(error)
+  }
+}
+
 fn evaluate_unary(
   operator: TokenType,
   right_expr,
   environment,
-) -> Result(Dynamic, LoxError) {
-  let assert Ok(value) = evaluate(right_expr, environment)
+) -> LoxResult(#(Dynamic, Environment)) {
+  let assert Ok(#(value, new_environment)) = evaluate(right_expr, environment)
   case operator {
-    Bang -> Ok(dynamic.from(!is_truthy(value)))
+    Bang -> Ok(#(dynamic.from(!is_truthy(value)), new_environment))
     Minus -> {
       let assert Ok(number) = dynamic.float(value)
-      Ok(dynamic.from(0.0 -. number))
+      Ok(#(dynamic.from(0.0 -. number), new_environment))
     }
     _ ->
       Error(RuntimeError(
@@ -117,20 +136,23 @@ fn evaluate_binary(
   left_expr,
   right_expr,
   environment,
-) -> Result(Dynamic, LoxError) {
-  let assert Ok(left_value) = evaluate(left_expr, environment)
-  let assert Ok(right_value) = evaluate(right_expr, environment)
+) -> LoxResult(#(Dynamic, Environment)) {
+  let assert Ok(#(left_value, environment1)) = evaluate(left_expr, environment)
+  let assert Ok(#(right_value, environment2)) =
+    evaluate(right_expr, environment1)
   // Some binary operators take only certain types.
   let numbers = unpack_values(dynamic.float, left_value, right_value)
   let strings = unpack_values(dynamic.string, left_value, right_value)
   // Evaluate the binary operators.
   case operator {
-    BangEqual -> Ok(dynamic.from(!{ left_value == right_value }))
-    EqualEqual -> Ok(dynamic.from({ left_value == right_value }))
+    BangEqual ->
+      Ok(#(dynamic.from(!{ left_value == right_value }), environment2))
+    EqualEqual ->
+      Ok(#(dynamic.from({ left_value == right_value }), environment2))
     Greater -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number >. right_number))
+          Ok(#(dynamic.from(left_number >. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -141,7 +163,7 @@ fn evaluate_binary(
     GreaterEqual -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number >=. right_number))
+          Ok(#(dynamic.from(left_number >=. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -152,7 +174,7 @@ fn evaluate_binary(
     Less -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number <. right_number))
+          Ok(#(dynamic.from(left_number <. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -163,7 +185,7 @@ fn evaluate_binary(
     LessEqual -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number <=. right_number))
+          Ok(#(dynamic.from(left_number <=. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -174,7 +196,7 @@ fn evaluate_binary(
     Minus -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number -. right_number))
+          Ok(#(dynamic.from(left_number -. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -185,9 +207,9 @@ fn evaluate_binary(
     Plus -> {
       case numbers, strings {
         Some([left_number, right_number]), None ->
-          Ok(dynamic.from(left_number +. right_number))
+          Ok(#(dynamic.from(left_number +. right_number), environment2))
         None, Some([left_string, right_string]) ->
-          Ok(dynamic.from(left_string <> right_string))
+          Ok(#(dynamic.from(left_string <> right_string), environment2))
         _, _ ->
           Error(RuntimeError(
             message: "binary operator Plus takes either two numbers or two strings.",
@@ -199,7 +221,7 @@ fn evaluate_binary(
     Slash -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number /. right_number))
+          Ok(#(dynamic.from(left_number /. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
@@ -210,7 +232,7 @@ fn evaluate_binary(
     Star -> {
       case numbers {
         Some([left_number, right_number]) ->
-          Ok(dynamic.from(left_number *. right_number))
+          Ok(#(dynamic.from(left_number *. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
