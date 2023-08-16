@@ -8,6 +8,7 @@ import gleam/list
 import gleam/regex
 import gleam/string
 import lox_gleam/error
+import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
@@ -21,7 +22,7 @@ pub fn scan(source) {
   case do_scan(source, [], 1) {
     Ok(tokens) -> list.reverse(tokens)
     Error(error) -> {
-      error.handle_error(error)
+      error_handler.handle_error(error)
       []
     }
   }

@@ -8,6 +8,7 @@ import lox_gleam/ast_types.{
   VarStmt, Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
+import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
   Bang, BangEqual, Eof, Equal, EqualEqual, Greater, GreaterEqual, Identifier,
@@ -25,7 +26,7 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
   case declaration(Ok(#([], tokens))) {
     Ok(#(statements, [])) -> list.reverse(statements)
     Ok(#(statements, [Token(line: line, ..)] as tokens)) -> {
-      error.handle_error(ParseError(
+      error_handler.handle_error(ParseError(
         message: "unexpected end of tokens.",
         exprs: [],
         line: line,
@@ -35,7 +36,7 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
       []
     }
     Ok(#(statements, tokens)) -> {
-      error.handle_error(ParseError(
+      error_handler.handle_error(ParseError(
         message: "parser failed to parse all tokens.",
         exprs: [],
         line: 0,
@@ -45,7 +46,7 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
       []
     }
     Error(error) -> {
-      error.handle_error(error)
+      error_handler.handle_error(error)
       []
     }
   }

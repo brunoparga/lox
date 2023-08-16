@@ -12,6 +12,7 @@ import lox_gleam/ast_types.{
 }
 import lox_gleam/environment.{Environment}
 import lox_gleam/error.{LoxResult, RuntimeError}
+import lox_gleam/error_handler
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
   Plus, Slash, Star, TokenType,
@@ -20,7 +21,7 @@ import lox_gleam/token_type.{
 pub fn interpret(statements: List(Stmt), environment) -> Environment {
   case execute(statements, environment) {
     Ok(#([], new_environment)) -> new_environment
-    Error(error) -> error.handle_error(error)
+    Error(error) -> error_handler.handle_error(error)
   }
 }
 
