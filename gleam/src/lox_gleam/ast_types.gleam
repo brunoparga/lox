@@ -1,11 +1,13 @@
 import gleam/dynamic
+import gleam/option
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{TokenType}
 
 pub type Stmt {
   Block(statements: List(Stmt))
-  PrintStmt(expression: Expr)
   ExprStmt(expression: Expr)
+  IfStmt(condition: Expr, then_branch: Stmt, else_branch: option.Option(Stmt))
+  PrintStmt(expression: Expr)
   VarStmt(name: Token, initializer: Expr)
 }
 

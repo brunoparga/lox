@@ -3,17 +3,19 @@
 
 import gleam/dynamic
 import gleam/list
+import gleam/option
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, Expr, ExprStmt, Grouping, Literal, PrintStmt, Stmt,
-  Unary, VarStmt, Variable,
+  Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, PrintStmt,
+  Stmt, Unary, VarStmt, Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  Bang, BangEqual, Eof, Equal, EqualEqual, Greater, GreaterEqual, Identifier,
-  LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue,
-  Minus, Number, Plus, Print, RightBrace, Semicolon, Slash, Star, TokenType, Var,
+  Bang, BangEqual, Else, Eof, Equal, EqualEqual, Greater, GreaterEqual,
+  Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil,
+  LoxString, LoxTrue, Minus, Number, Plus, Print, RightBrace, RightParen,
+  Semicolon, Slash, Star, TokenType, Var,
 }
 
 type ExprAndTokens =
@@ -35,16 +37,9 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
       ))
       []
     }
-    Ok(#(statements, tokens)) -> {
-      error_handler.handle_error(ParseError(
-        message: "parser failed to parse all tokens.",
-        exprs: [],
-        line: 0,
-        stmts: statements,
-        tokens: tokens,
-      ))
-      []
-    }
+    Ok(#(statements, new_tokens)) ->
+      // This handles the weird case of top-level blocks.
+      list.reverse(list.concat([list.reverse(parse(new_tokens)), statements]))
     Error(error) -> {
       error_handler.handle_error(error)
       []
@@ -72,12 +67,94 @@ fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
 fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
-    Var -> var_declaration(statements, other_tokens)
+    Else -> Ok(#(statements, tokens))
+    If -> if_statement(statements, other_tokens)
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
     Print -> do_statement(statements, other_tokens, PrintStmt)
+    Var -> var_declaration(statements, other_tokens)
     _ -> do_statement(statements, tokens, ExprStmt)
   }
+}
+
+fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
+  let [first_token, ..new_tokens] = tokens
+  case first_token.token_type {
+    LeftParen -> if_condition_is_ok(statements, new_tokens)
+    _ ->
+      Error(ParseError(
+        message: "expect '(' after 'if'.",
+        line: first_token.line,
+        exprs: [],
+        stmts: statements,
+        tokens: tokens,
+      ))
+  }
+}
+
+fn if_condition_is_ok(statements, tokens) {
+  case expression(tokens) {
+    Ok(#(condition, tokens1)) -> {
+      let [right_paren, ..tokens2] = tokens1
+      case right_paren.token_type {
+        RightParen -> do_if_statement(condition, statements, tokens2)
+        _ ->
+          Error(ParseError(
+            message: "expect ')' after if condition.",
+            line: right_paren.line,
+            exprs: [],
+            stmts: statements,
+            tokens: tokens,
+          ))
+      }
+    }
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_if_statement(condition, statements, tokens) {
+  case statement(statements, tokens) {
+    Ok(#([then_branch, ..new_statements], [else, ..new_tokens])) -> {
+      case else.token_type {
+        Else -> if_then_else(condition, then_branch, new_statements, new_tokens)
+        _ -> if_without_else(condition, then_branch, new_statements, new_tokens)
+      }
+    }
+    Ok(_) ->
+      Error(ParseError(
+        message: "expected statement after 'else'.",
+        line: 0,
+        exprs: [],
+        stmts: statements,
+        tokens: tokens,
+      ))
+    Error(error) -> Error(error)
+  }
+}
+
+fn if_then_else(condition, then_branch, statements, tokens) {
+  case statement(statements, tokens) {
+    Ok(#([else_branch, ..new_statements], new_tokens)) -> {
+      let if_else_stmt =
+        IfStmt(
+          condition: condition,
+          then_branch: then_branch,
+          else_branch: option.Some(else_branch),
+        )
+      declaration(Ok(#([if_else_stmt, ..new_statements], new_tokens)))
+    }
+    Error(error) -> Error(error)
+  }
+}
+
+fn if_without_else(condition, then_branch, statements, tokens) {
+  let if_stmt =
+    IfStmt(
+      condition: condition,
+      then_branch: then_branch,
+      else_branch: option.None,
+    )
+  declaration(Ok(#([if_stmt, ..statements], tokens)))
 }
 
 fn var_declaration(statements, tokens: List(Token)) {
@@ -146,7 +223,7 @@ fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) 
       case declaration(Ok(#([], tokens))) {
         Ok(#(block_statements, new_tokens)) -> {
           let block = Block(list.reverse(block_statements))
-          declaration(Ok(#([block, ..existing_statements], new_tokens)))
+          Ok(#([block, ..existing_statements], new_tokens))
         }
         Error(error) -> Error(error)
       }
