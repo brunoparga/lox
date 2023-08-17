@@ -5,6 +5,7 @@ import gleam/dynamic.{Dynamic}
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
   Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, PrintStmt, Stmt,
@@ -26,13 +27,14 @@ pub fn interpret(statements: List(Stmt), environment) -> Environment {
 }
 
 fn execute(statements, environment) {
-  case do_execute(statements, environment) {
-    Ok(#([], Global(..) as env)) -> Ok(#([], env))
-    Ok(#([], Local(parent: parent, ..))) -> Ok(#([], parent))
-    Ok(#(new_statements, environment)) ->
-      do_execute(new_statements, environment)
-    Error(error) -> Error(error)
-  }
+  do_execute(statements, environment)
+  |> then(fn(result) {
+    case result {
+      #([], Global(..) as env) -> Ok(#([], env))
+      #([], Local(parent: parent, ..)) -> Ok(#([], parent))
+      #(new_statements, environment) -> do_execute(new_statements, environment)
+    }
+  })
 }
 
 fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) {
@@ -61,76 +63,89 @@ fn if_stmt(
   environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
   let assert IfStmt(condition, then_branch, else_branch) = if_statement
-  case evaluate(condition, environment) {
-    Ok(#(value, new_environment)) ->
-      case is_truthy(value) {
-        True -> do_then_branch(then_branch, other_statements, new_environment)
-        False -> do_else_branch(else_branch, other_statements, new_environment)
-      }
-    Error(error) -> Error(error)
-  }
+  evaluate(condition, environment)
+  |> then(fn(result) {
+    let #(value, new_environment) = result
+    case is_truthy(value) {
+      True -> do_then_branch(then_branch, other_statements, new_environment)
+      False -> do_else_branch(else_branch, other_statements, new_environment)
+    }
+  })
 }
 
 fn do_then_branch(statement, other_statements, environment) {
-  case execute([statement], environment) {
-    Ok(#([], new_environment)) -> execute(other_statements, new_environment)
-    Ok(_) -> Error(NotImplementedError)
-    Error(error) -> Error(error)
-  }
+  [statement]
+  |> execute(environment)
+  |> result.then(fn(result) {
+    case result {
+      #([], new_environment) -> execute(other_statements, new_environment)
+      _ -> Error(NotImplementedError)
+    }
+  })
 }
 
 fn do_else_branch(else_branch, other_statements, environment) {
   case else_branch {
     Some(statement) -> {
-      case execute([statement], environment) {
-        Ok(#([], new_environment)) -> execute(other_statements, new_environment)
-        Ok(_) -> Error(NotImplementedError)
-        Error(error) -> Error(error)
-      }
+      execute([statement], environment)
+      |> then(fn(result) {
+        case result {
+          #([], new_environment) -> execute(other_statements, new_environment)
+          _ -> Error(NotImplementedError)
+        }
+      })
     }
     None -> execute(other_statements, environment)
   }
 }
 
 fn block(block_statements, other_statements, environment) {
-  let child_environment = environment.create(option.Some(environment))
-  case execute(block_statements, child_environment) {
-    Ok(#([], maybe_changed_parent)) -> {
-      execute(other_statements, maybe_changed_parent)
+  environment
+  |> Some()
+  |> environment.create()
+  |> execute(block_statements, _)
+  |> then(fn(result) {
+    case result {
+      #([], new_parent) -> execute(other_statements, new_parent)
+      _ -> Error(NotImplementedError)
     }
-    Ok(_) -> Error(NotImplementedError)
-    Error(error) -> Error(error)
-  }
+  })
 }
 
 fn expression_stmt(expression, statements, environment) {
-  case evaluate(expression, environment) {
-    Ok(#(_value, new_environment)) -> do_execute(statements, new_environment)
-    Error(error) -> Error(error)
-  }
+  evaluate(expression, environment)
+  |> then(fn(result) {
+    case result {
+      #(_value, new_environment) -> do_execute(statements, new_environment)
+    }
+  })
 }
 
 fn print_stmt(expression, statements, environment) {
-  case evaluate(expression, environment) {
-    Ok(#(value, new_environment)) -> {
-      value
-      |> string.inspect()
-      |> io.println()
-      do_execute(statements, new_environment)
+  evaluate(expression, environment)
+  |> then(fn(result) {
+    case result {
+      #(value, new_environment) -> {
+        value
+        |> string.inspect()
+        |> io.println()
+        do_execute(statements, new_environment)
+      }
     }
-    Error(error) -> Error(error)
-  }
+  })
 }
 
 fn variable_stmt(name_token, initializer, statements, environment) {
-  case evaluate(initializer, environment) {
-    Ok(#(value, environment1)) -> {
-      let environment2 =
-        environment.define(environment1, name_token.lexeme, value)
-      do_execute(statements, environment2)
+  evaluate(initializer, environment)
+  |> then(fn(result) {
+    case result {
+      #(value, environment1) -> {
+        let environment2 =
+          environment.define(environment1, name_token.lexeme, value)
+        do_execute(statements, environment2)
+      }
     }
-    Error(error) -> Error(error)
-  }
+  })
 }
 
 fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
@@ -153,14 +168,20 @@ fn evaluate_assignment(
   expression,
   environment,
 ) -> LoxResult(#(Dynamic, Environment)) {
-  case evaluate(expression, environment) {
-    Ok(#(value, environment1)) -> {
-      case environment.assign(environment1, name_token, dynamic.from(value)) {
-        Ok(environment2) -> Ok(#(dynamic.from(value), environment2))
-        Error(error) -> Error(error)
-      }
+  evaluate(expression, environment)
+  |> then(fn(result) { do_assignment(name_token, result) })
+}
+
+fn do_assignment(name_token, result) {
+  case result {
+    #(value, environment) -> {
+      environment.assign(environment, name_token, dynamic.from(value))
+      |> then(fn(env) {
+        case env {
+          new_environment -> Ok(#(dynamic.from(value), new_environment))
+        }
+      })
     }
-    Error(error) -> Error(error)
   }
 }
 
