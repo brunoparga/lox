@@ -11,9 +11,7 @@ import lox_gleam/ast_types.{
   Unary, VarStmt, Variable,
 }
 import lox_gleam/environment.{Environment, Global, Local}
-import lox_gleam/error.{
-  LoxResult, NotImplementedError, RuntimeError, UnreachableCodeReachedError,
-}
+import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
@@ -97,14 +95,8 @@ fn do_else_branch(else_branch, other_statements, environment) {
 fn block(block_statements, other_statements, environment) {
   let child_environment = environment.create(option.Some(environment))
   case execute(block_statements, child_environment) {
-    Ok(#([], child_env_with_maybe_changed_parent)) -> {
-      case child_env_with_maybe_changed_parent {
-        Local(parent: maybe_changed_parent, ..) -> {
-          // The block might have reassigned a variable in the parent
-          execute(other_statements, maybe_changed_parent)
-        }
-        Global(..) -> Error(UnreachableCodeReachedError)
-      }
+    Ok(#([], maybe_changed_parent)) -> {
+      execute(other_statements, maybe_changed_parent)
     }
     Ok(_) -> Error(NotImplementedError)
     Error(error) -> Error(error)

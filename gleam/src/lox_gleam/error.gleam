@@ -20,9 +20,6 @@ pub type LoxError {
   ScanInvalidNumberError
   ScanUnexpectedEOFError
   TooManyArgumentsError
-  // This is an HTTP status code 724.
-  // See https://github.com/joho/7XX-rfc
-  UnreachableCodeReachedError
 }
 
 pub type LoxResult(t) =
