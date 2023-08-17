@@ -11,7 +11,9 @@ import lox_gleam/ast_types.{
   Unary, VarStmt, Variable,
 }
 import lox_gleam/environment.{Environment, Global, Local}
-import lox_gleam/error.{LoxResult, RuntimeError}
+import lox_gleam/error.{
+  LoxResult, NotImplementedError, RuntimeError, UnreachableCodeReachedError,
+}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
   Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
@@ -41,20 +43,71 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
     _ -> {
       let [statement, ..other_statements] = statements
       case statement {
+        Block(block_statements) ->
+          block(block_statements, other_statements, environment)
         ExprStmt(expression: expression) ->
           expression_stmt(expression, other_statements, environment)
+        IfStmt(..) -> if_stmt(statement, other_statements, environment)
         PrintStmt(expression: expression) ->
           print_stmt(expression, other_statements, environment)
         VarStmt(name, initializer) ->
           variable_stmt(name, initializer, other_statements, environment)
-        Block(block_statements) -> {
-          let child_environment = environment.create(option.Some(environment))
-          execute(block_statements, child_environment)
-          execute(other_statements, environment)
-        }
-        IfStmt(..) -> Error(error.NotImplementedError)
       }
     }
+  }
+}
+
+fn if_stmt(
+  if_statement,
+  other_statements,
+  environment,
+) -> LoxResult(#(List(Stmt), Environment)) {
+  let assert IfStmt(condition, then_branch, else_branch) = if_statement
+  case evaluate(condition, environment) {
+    Ok(#(value, new_environment)) ->
+      case is_truthy(value) {
+        True -> do_then_branch(then_branch, other_statements, new_environment)
+        False -> do_else_branch(else_branch, other_statements, new_environment)
+      }
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_then_branch(statement, other_statements, environment) {
+  case execute([statement], environment) {
+    Ok(#([], new_environment)) -> execute(other_statements, new_environment)
+    Ok(_) -> Error(NotImplementedError)
+    Error(error) -> Error(error)
+  }
+}
+
+fn do_else_branch(else_branch, other_statements, environment) {
+  case else_branch {
+    Some(statement) -> {
+      case execute([statement], environment) {
+        Ok(#([], new_environment)) -> execute(other_statements, new_environment)
+        Ok(_) -> Error(NotImplementedError)
+        Error(error) -> Error(error)
+      }
+    }
+    None -> execute(other_statements, environment)
+  }
+}
+
+fn block(block_statements, other_statements, environment) {
+  let child_environment = environment.create(option.Some(environment))
+  case execute(block_statements, child_environment) {
+    Ok(#([], child_env_with_maybe_changed_parent)) -> {
+      case child_env_with_maybe_changed_parent {
+        Local(parent: maybe_changed_parent, ..) -> {
+          // The block might have reassigned a variable in the parent
+          execute(other_statements, maybe_changed_parent)
+        }
+        Global(..) -> Error(UnreachableCodeReachedError)
+      }
+    }
+    Ok(_) -> Error(NotImplementedError)
+    Error(error) -> Error(error)
   }
 }
 
