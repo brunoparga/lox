@@ -7,7 +7,7 @@ import gleam/option
 import gleam/result.{then}
 import lox_gleam/ast_types.{
   Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, Logical,
-  PrintStmt, Stmt, Unary, VarStmt, Variable,
+  PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
@@ -16,7 +16,7 @@ import lox_gleam/token_type.{
   And, Bang, BangEqual, Else, Eof, Equal, EqualEqual, Greater, GreaterEqual,
   Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil,
   LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace, RightParen,
-  Semicolon, Slash, Star, TokenType, Var,
+  Semicolon, Slash, Star, TokenType, Var, While,
 }
 
 type ExprAndTokens =
@@ -74,6 +74,7 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
     RightBrace -> Ok(#(statements, other_tokens))
     Print -> do_statement(statements, other_tokens, PrintStmt)
     Var -> var_declaration(statements, other_tokens)
+    While -> while_statement(statements, other_tokens)
     _ -> do_statement(statements, tokens, ExprStmt)
   }
 }
@@ -223,6 +224,64 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
             ))
         }
       }
+    }
+  })
+}
+
+fn while_statement(statements, tokens) {
+  let [first_token, ..new_tokens] = tokens
+  case first_token.token_type {
+    LeftParen -> while_condition_is_ok(statements, new_tokens)
+    _ ->
+      Error(ParseError(
+        message: "expect '(' after 'while'.",
+        line: first_token.line,
+        exprs: [],
+        stmts: statements,
+        tokens: tokens,
+      ))
+  }
+}
+
+fn while_condition_is_ok(statements, tokens) {
+  tokens
+  |> expression
+  |> then(fn(result) {
+    case result {
+      #(condition, tokens1) -> {
+        let [right_paren, ..tokens2] = tokens1
+        case right_paren.token_type {
+          RightParen -> do_while_statement(condition, statements, tokens2)
+          _ ->
+            Error(ParseError(
+              message: "expect ')' after while condition.",
+              line: right_paren.line,
+              exprs: [],
+              stmts: statements,
+              tokens: tokens,
+            ))
+        }
+      }
+    }
+  })
+}
+
+fn do_while_statement(condition, statements, tokens) {
+  statement(statements, tokens)
+  |> then(fn(result) {
+    case result {
+      #([body, ..new_statements], new_tokens) -> {
+        let while_stmt = WhileStmt(condition: condition, body: body)
+        declaration(Ok(#([while_stmt, ..new_statements], new_tokens)))
+      }
+      _ ->
+        Error(ParseError(
+          message: "expected statement as 'while' loop body.",
+          line: 0,
+          exprs: [],
+          stmts: statements,
+          tokens: tokens,
+        ))
     }
   })
 }
@@ -444,7 +503,8 @@ fn binary_inner(token_types, function, expr_type) {
     expr_and_tokens
     |> then(fn(result) {
       case result {
-        #(expr, tokens) -> happy_path(token_types, function, expr_type)(expr, tokens)
+        #(expr, tokens) ->
+          happy_path(token_types, function, expr_type)(expr, tokens)
       }
     })
   }
@@ -454,21 +514,35 @@ fn happy_path(token_types, function, expr_type) {
   fn(expr, tokens) {
     let [first_token, ..other_tokens] = tokens
     case match(first_token, token_types) {
-      True -> build_binary(token_types, function, expr, first_token, other_tokens, expr_type)
+      True ->
+        build_binary(
+          token_types,
+          function,
+          expr,
+          first_token,
+          other_tokens,
+          expr_type,
+        )
       False -> Ok(#(expr, tokens))
     }
   }
 }
 
-fn build_binary(token_types, function, left, first_token, other_tokens, expr_type) {
+fn build_binary(
+  token_types,
+  function,
+  left,
+  first_token,
+  other_tokens,
+  expr_type,
+) {
   other_tokens
   |> function
   |> then(fn(result) {
     case result {
       #(right, tokens2) -> {
         let Token(line: line, token_type: token_type, ..) = first_token
-        let binary =
-          expr_type(token_type, left, right, line)
+        let binary = expr_type(token_type, left, right, line)
         binary_inner(token_types, function, expr_type)(Ok(#(binary, tokens2)))
       }
     }

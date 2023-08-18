@@ -8,15 +8,15 @@ import gleam/option.{None, Some}
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, Logical, PrintStmt, Stmt,
-  Unary, VarStmt, Variable,
+  Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, Logical, PrintStmt,
+  Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Global, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
-  And, Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus, Or,
-  Plus, Slash, Star, TokenType,
+  And, Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual,
+  Minus, Or, Plus, Slash, Star, TokenType,
 }
 
 pub fn interpret(statements: List(Stmt), environment) -> Environment {
@@ -52,9 +52,37 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
           print_stmt(expression, other_statements, environment)
         VarStmt(name, initializer) ->
           variable_stmt(name, initializer, other_statements, environment)
+        WhileStmt(condition, body) ->
+          while_stmt(condition, body, other_statements, environment)
       }
     }
   }
+}
+
+fn while_stmt(condition, body, other_statements, environment) {
+  evaluate(condition, environment)
+  |> then(fn(result) {
+    let #(value, environment1) = result
+    case is_truthy(value) {
+      True -> do_while_stmt(condition, [body], other_statements, environment1)
+      False -> execute(other_statements, environment1)
+    }
+  })
+}
+
+fn do_while_stmt(condition, body_statements, other_statements, environment) {
+  execute(body_statements, environment)
+  |> then(fn(result) {
+    case result {
+      #(_stmt, new_environment) ->
+        while_stmt(
+          condition,
+          body_statements,
+          other_statements,
+          new_environment,
+        )
+    }
+  })
 }
 
 fn if_stmt(
@@ -156,7 +184,8 @@ fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
       evaluate_binary(operator, left, right, environment)
     Grouping(expression, ..) -> evaluate(expression, environment)
     Literal(value, ..) -> Ok(#(value, environment))
-    Logical(operator, left, right, ..) -> evaluate_logical(operator, left, right, environment)
+    Logical(operator, left, right, ..) ->
+      evaluate_logical(operator, left, right, environment)
     Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
     Variable(name_token) -> environment.get(environment, name_token.lexeme)
     _ ->
@@ -308,7 +337,8 @@ fn evaluate_logical(operator, left_expr, right_expr, environment) {
   case operator, is_truthy(left_value) {
     Or, True | And, False -> Ok(#(dynamic.from(left_value), environment1))
     And, True | Or, False -> {
-      let assert Ok(#(right_value, environment2)) = evaluate(right_expr, environment1)
+      let assert Ok(#(right_value, environment2)) =
+        evaluate(right_expr, environment1)
       Ok(#(dynamic.from(right_value), environment2))
     }
     _, _ -> Error(NotImplementedError)
