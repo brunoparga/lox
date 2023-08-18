@@ -56,6 +56,9 @@ class Parser {
     if (match(PRINT)) {
       return printStatement();
     }
+    if (match(WHILE)) {
+      return whileStatement();
+    }
     if (match(LEFT_BRACE)) {
       return new Stmt.Block(block());
     }
@@ -83,6 +86,15 @@ class Parser {
     return new Stmt.Print(value);
   }
 
+  private Stmt whileStatement() {
+    consume(LEFT_PAREN, "Expect '(' after 'while'.");
+    Expr condition = expression();
+    consume(RIGHT_PAREN, "Expect ')' after condition.");
+    Stmt body = statement();
+
+    return new Stmt.While(condition, body);
+  }
+
   private Stmt expressionStatement() {
     Expr expr = expression();
     consume(SEMICOLON, "Expect ';' after value.");
@@ -92,7 +104,7 @@ class Parser {
   private List<Stmt> block() {
     List<Stmt> statements = new ArrayList<>();
 
-    while(!check(RIGHT_BRACE) && !isAtEnd()) {
+    while (!check(RIGHT_BRACE) && !isAtEnd()) {
       statements.add(declaration());
     }
 
