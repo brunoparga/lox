@@ -16,6 +16,7 @@ pub type Expr {
   Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
   Grouping(expression: Expr, line: Int)
   Literal(value: dynamic.Dynamic, line: Int)
+  Logical(operator: TokenType, left: Expr, right: Expr, line: Int)
   Unary(operator: TokenType, right: Expr, line: Int)
   Variable(name: Token)
 }

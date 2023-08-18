@@ -6,16 +6,16 @@ import gleam/list
 import gleam/option
 import gleam/result.{then}
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, PrintStmt,
-  Stmt, Unary, VarStmt, Variable,
+  Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, Logical,
+  PrintStmt, Stmt, Unary, VarStmt, Variable,
 }
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  Bang, BangEqual, Else, Eof, Equal, EqualEqual, Greater, GreaterEqual,
+  And, Bang, BangEqual, Else, Eof, Equal, EqualEqual, Greater, GreaterEqual,
   Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil,
-  LoxString, LoxTrue, Minus, Number, Plus, Print, RightBrace, RightParen,
+  LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace, RightParen,
   Semicolon, Slash, Star, TokenType, Var,
 }
 
@@ -264,7 +264,7 @@ fn expression(tokens) -> LoxResult(ExprAndTokens) {
 
 fn assignment(tokens) -> LoxResult(ExprAndTokens) {
   tokens
-  |> equality
+  |> or
   |> then(fn(result) {
     case result {
       #(name_expr, []) ->
@@ -295,9 +295,8 @@ fn do_valid_assignment(name_expr, tokens) {
     case result {
       #(value_expr, new_tokens) -> {
         case name_expr {
-          Variable(name: name) -> {
+          Variable(name: name) ->
             Ok(#(Assign(name: name, value: value_expr), new_tokens))
-          }
           _ ->
             Error(ParseError(
               message: "invalid assignment target.",
@@ -312,28 +311,40 @@ fn do_valid_assignment(name_expr, tokens) {
   })
 }
 
+fn or(tokens) {
+  tokens
+  |> and
+  |> binary_inner([Or], and, Logical)
+}
+
+fn and(tokens) {
+  tokens
+  |> equality
+  |> binary_inner([And], equality, Logical)
+}
+
 fn equality(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> comparison()
-  |> binary_inner([BangEqual, EqualEqual], comparison)
+  |> binary_inner([BangEqual, EqualEqual], comparison, Binary)
 }
 
 fn comparison(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> term()
-  |> binary_inner([Greater, GreaterEqual, Less, LessEqual], term)
+  |> binary_inner([Greater, GreaterEqual, Less, LessEqual], term, Binary)
 }
 
 fn term(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> factor()
-  |> binary_inner([Minus, Plus], factor)
+  |> binary_inner([Minus, Plus], factor, Binary)
 }
 
 fn factor(tokens) -> LoxResult(ExprAndTokens) {
   tokens
   |> unary()
-  |> binary_inner([Slash, Star], unary)
+  |> binary_inner([Slash, Star], unary, Binary)
 }
 
 fn unary(tokens) -> LoxResult(ExprAndTokens) {
@@ -428,28 +439,28 @@ fn match(token: Token, types: List(TokenType)) -> Bool {
   list.any(types, fn(type_to_match) { token.token_type == type_to_match })
 }
 
-fn binary_inner(types, function) {
+fn binary_inner(token_types, function, expr_type) {
   fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
     expr_and_tokens
     |> then(fn(result) {
       case result {
-        #(expr, tokens) -> happy_path(types, function)(expr, tokens)
+        #(expr, tokens) -> happy_path(token_types, function, expr_type)(expr, tokens)
       }
     })
   }
 }
 
-fn happy_path(types, function) {
+fn happy_path(token_types, function, expr_type) {
   fn(expr, tokens) {
     let [first_token, ..other_tokens] = tokens
-    case match(first_token, types) {
-      True -> build_binary(types, function, expr, first_token, other_tokens)
+    case match(first_token, token_types) {
+      True -> build_binary(token_types, function, expr, first_token, other_tokens, expr_type)
       False -> Ok(#(expr, tokens))
     }
   }
 }
 
-fn build_binary(types, function, left, first_token, other_tokens) {
+fn build_binary(token_types, function, left, first_token, other_tokens, expr_type) {
   other_tokens
   |> function
   |> then(fn(result) {
@@ -457,8 +468,8 @@ fn build_binary(types, function, left, first_token, other_tokens) {
       #(right, tokens2) -> {
         let Token(line: line, token_type: token_type, ..) = first_token
         let binary =
-          Binary(operator: token_type, left: left, right: right, line: line)
-        binary_inner(types, function)(Ok(#(binary, tokens2)))
+          expr_type(token_type, left, right, line)
+        binary_inner(token_types, function, expr_type)(Ok(#(binary, tokens2)))
       }
     }
   })
