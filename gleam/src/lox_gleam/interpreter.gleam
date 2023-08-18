@@ -8,14 +8,14 @@ import gleam/option.{None, Some}
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, PrintStmt, Stmt,
+  Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, Logical, PrintStmt, Stmt,
   Unary, VarStmt, Variable,
 }
 import lox_gleam/environment.{Environment, Global, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
-  Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus,
+  And, Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual, Minus, Or,
   Plus, Slash, Star, TokenType,
 }
 
@@ -150,13 +150,14 @@ fn variable_stmt(name_token, initializer, statements, environment) {
 
 fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
   case expression {
-    Literal(value, ..) -> Ok(#(value, environment))
     Assign(name: name_token, value: expr) ->
       evaluate_assignment(name_token, expr, environment)
-    Grouping(expression, ..) -> evaluate(expression, environment)
-    Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
     Binary(operator, left, right, ..) ->
       evaluate_binary(operator, left, right, environment)
+    Grouping(expression, ..) -> evaluate(expression, environment)
+    Literal(value, ..) -> Ok(#(value, environment))
+    Logical(operator, left, right, ..) -> evaluate_logical(operator, left, right, environment)
+    Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
     Variable(name_token) -> environment.get(environment, name_token.lexeme)
     _ ->
       Error(RuntimeError(message: "unexpected expression found.", values: []))
@@ -182,26 +183,6 @@ fn do_assignment(name_token, result) {
         }
       })
     }
-  }
-}
-
-fn evaluate_unary(
-  operator: TokenType,
-  right_expr,
-  environment,
-) -> LoxResult(#(Dynamic, Environment)) {
-  let assert Ok(#(value, new_environment)) = evaluate(right_expr, environment)
-  case operator {
-    Bang -> Ok(#(dynamic.from(!is_truthy(value)), new_environment))
-    Minus -> {
-      let assert Ok(number) = dynamic.float(value)
-      Ok(#(dynamic.from(0.0 -. number), new_environment))
-    }
-    _ ->
-      Error(RuntimeError(
-        message: "unexpected operator in unary expression.",
-        values: [value],
-      ))
   }
 }
 
@@ -318,6 +299,38 @@ fn evaluate_binary(
       Error(RuntimeError(
         message: "unrecognized token " <> string.inspect(operator) <> " in binary expression.",
         values: [left_value, right_value],
+      ))
+  }
+}
+
+fn evaluate_logical(operator, left_expr, right_expr, environment) {
+  let assert Ok(#(left_value, environment1)) = evaluate(left_expr, environment)
+  case operator, is_truthy(left_value) {
+    Or, True | And, False -> Ok(#(dynamic.from(left_value), environment1))
+    And, True | Or, False -> {
+      let assert Ok(#(right_value, environment2)) = evaluate(right_expr, environment1)
+      Ok(#(dynamic.from(right_value), environment2))
+    }
+    _, _ -> Error(NotImplementedError)
+  }
+}
+
+fn evaluate_unary(
+  operator: TokenType,
+  right_expr,
+  environment,
+) -> LoxResult(#(Dynamic, Environment)) {
+  let assert Ok(#(value, new_environment)) = evaluate(right_expr, environment)
+  case operator {
+    Bang -> Ok(#(dynamic.from(!is_truthy(value)), new_environment))
+    Minus -> {
+      let assert Ok(number) = dynamic.float(value)
+      Ok(#(dynamic.from(0.0 -. number), new_environment))
+    }
+    _ ->
+      Error(RuntimeError(
+        message: "unexpected operator in unary expression.",
+        values: [value],
       ))
   }
 }
