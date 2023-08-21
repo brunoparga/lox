@@ -1,3 +1,4 @@
 **/.vscode
 java/jlox
 hello.lox
+**/test.sh
