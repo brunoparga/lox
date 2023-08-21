@@ -9,11 +9,11 @@ import lox_gleam/ast_types.{
   Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, Logical,
   PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
-import lox_gleam/error.{LoxResult, ParseError}
+import lox_gleam/error.{LoxResult, NotImplementedError, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  And, Bang, BangEqual, Else, Eof, Equal, EqualEqual, Greater, GreaterEqual,
+  And, Bang, BangEqual, Else, Eof, Equal, EqualEqual, For, Greater, GreaterEqual,
   Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil,
   LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace, RightParen,
   Semicolon, Slash, Star, TokenType, Var, While,
@@ -27,7 +27,8 @@ type StmtsAndTokens =
 
 pub fn parse(tokens: List(Token)) -> List(Stmt) {
   case declaration(Ok(#([], tokens))) {
-    Ok(#(statements, [])) -> list.reverse(statements)
+    Ok(#(statements, [])) | Ok(#(statements, [Token(token_type: Eof, ..)])) ->
+      list.reverse(statements)
     Ok(#(statements, [Token(line: line, ..)] as tokens)) -> {
       error_handler.handle_error(ParseError(
         message: "unexpected end of tokens.",
@@ -69,13 +70,95 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     Else -> Ok(#(statements, tokens))
+    For -> for_statement(statements, other_tokens)
     If -> if_statement(statements, other_tokens)
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
     Print -> do_statement(statements, other_tokens, PrintStmt)
-    Var -> var_declaration(statements, other_tokens)
+    Var -> declaration(var_declaration(statements, other_tokens))
     While -> while_statement(statements, other_tokens)
     _ -> do_statement(statements, tokens, ExprStmt)
+  }
+}
+
+fn for_statement(statements, tokens: List(Token)) {
+  let stmt_extractor = fn(result) {
+    case result {
+      #([stmt, ..new_statements], new_tokens) ->
+        Ok(#(option.Some(stmt), new_statements, new_tokens))
+    }
+  }
+  let [first_token, ..tokens1] = tokens
+  case first_token.token_type {
+    LeftParen -> {
+      let [second_token, ..tokens2] = tokens1
+      let assert Ok(#(initializer_stmt, statements2, tokens3)) = case
+        second_token.token_type
+      {
+        Semicolon -> Ok(#(option.None, statements, tokens2))
+        Var ->
+          var_declaration(statements, tokens2)
+          |> then(stmt_extractor)
+        _ -> {
+          do_statement(statements, tokens2, ExprStmt)
+          |> then(stmt_extractor)
+        }
+      }
+
+      let [third_token, ..tokens4] = tokens3
+      let assert Ok(#(condition_expr, tokens5)) = case third_token.token_type {
+        Semicolon -> Ok(#(option.None, tokens4))
+        _ ->
+          tokens3
+          |> expression
+          |> then(fn(result) {
+            let #(expr, new_tokens) = result
+            Ok(#(option.Some(expr), new_tokens))
+          })
+      }
+
+      let [fourth_token, ..tokens6] = tokens5
+      let assert Ok(#(increment_expr, tokens7)) = case fourth_token.token_type {
+        RightParen -> Ok(#(option.None, tokens6))
+        _ ->
+          tokens6
+          |> expression
+          |> then(fn(result) {
+            let #(expr, [_right_paren, ..new_tokens]) = result
+            Ok(#(option.Some(expr), new_tokens))
+          })
+      }
+
+      let assert Ok(#([body0, ..statements3], tokens8)) =
+        statement(statements2, tokens7)
+
+      let body1 = case increment_expr {
+        option.None -> body0
+        option.Some(expr) -> {
+          let increment_stmt = ExprStmt(expr)
+          case body0 {
+            Block(statements) ->
+              Block(list.append(statements, [increment_stmt]))
+            _ -> Block([body0, increment_stmt])
+          }
+        }
+      }
+
+      let while_condition = case condition_expr {
+        option.None ->
+          Literal(value: dynamic.from(True), line: third_token.line)
+        option.Some(expr) -> expr
+      }
+
+      let while_stmt = WhileStmt(condition: while_condition, body: body1)
+
+      let final_while = case initializer_stmt {
+        option.None -> while_stmt
+        option.Some(init_stmt) -> Block([init_stmt, while_stmt])
+      }
+      declaration(Ok(#([final_while, ..statements3], tokens8)))
+    }
+    _ -> Error(NotImplementedError)
   }
 }
 
@@ -191,7 +274,7 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
     Semicolon -> {
       let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
       let var_statement = VarStmt(name: variable_name, initializer: nil_expr)
-      declaration(Ok(#([var_statement, ..statements], new_tokens)))
+      Ok(#([var_statement, ..statements], new_tokens))
     }
     _ ->
       Error(ParseError(
@@ -212,7 +295,7 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
         case semicolon.token_type {
           Semicolon -> {
             let var_statement = VarStmt(name: name, initializer: expr)
-            declaration(Ok(#([var_statement, ..statements], new_tokens)))
+            Ok(#([var_statement, ..statements], new_tokens))
           }
           _ ->
             Error(ParseError(

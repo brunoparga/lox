@@ -5,6 +5,7 @@
 import gleam/dynamic
 import gleam/map
 import gleam/option
+import gleam/result
 import lox_gleam/error
 import lox_gleam/token
 
@@ -56,6 +57,13 @@ pub fn assign(
     False, False -> {
       let assert Local(parent: parent, ..) = environment
       assign(parent, name_token, value)
+      |> result.then(fn(new_parent) {
+        case environment {
+          Local(table: table, ..) -> Ok(Local(parent: new_parent, table: table))
+          // This is unreachable.
+          Global(..) -> Error(error.NotImplementedError)
+        }
+      })
     }
     True, False ->
       Error(error.RuntimeError(
@@ -75,6 +83,11 @@ pub fn get(
     False, Error(Nil) -> {
       let assert Local(parent: parent, ..) = environment
       get(parent, variable)
+      |> result.then(fn(value_and_env) {
+        // We don't care where the variable was found
+        let #(value, _irrelevant_env) = value_and_env
+        Ok(#(value, environment))
+      })
     }
     True, Error(Nil) ->
       Error(error.RuntimeError(

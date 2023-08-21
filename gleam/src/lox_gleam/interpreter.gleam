@@ -11,7 +11,7 @@ import lox_gleam/ast_types.{
   Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, Logical, PrintStmt,
   Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
-import lox_gleam/environment.{Environment, Global, Local}
+import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
 import lox_gleam/error_handler
 import lox_gleam/token_type.{
@@ -30,9 +30,9 @@ fn execute(statements, environment) {
   do_execute(statements, environment)
   |> then(fn(result) {
     case result {
-      #([], Global(..) as env) -> Ok(#([], env))
-      #([], Local(parent: parent, ..)) -> Ok(#([], parent))
-      #(new_statements, environment) -> do_execute(new_statements, environment)
+      #([], env) -> Ok(#([], env))
+      #(new_statements, new_environment) ->
+        do_execute(new_statements, new_environment)
     }
   })
 }
@@ -57,32 +57,6 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
       }
     }
   }
-}
-
-fn while_stmt(condition, body, other_statements, environment) {
-  evaluate(condition, environment)
-  |> then(fn(result) {
-    let #(value, environment1) = result
-    case is_truthy(value) {
-      True -> do_while_stmt(condition, [body], other_statements, environment1)
-      False -> execute(other_statements, environment1)
-    }
-  })
-}
-
-fn do_while_stmt(condition, body_statements, other_statements, environment) {
-  execute(body_statements, environment)
-  |> then(fn(result) {
-    case result {
-      #(_stmt, new_environment) ->
-        while_stmt(
-          condition,
-          body_statements,
-          other_statements,
-          new_environment,
-        )
-    }
-  })
 }
 
 fn if_stmt(
@@ -134,7 +108,8 @@ fn block(block_statements, other_statements, environment) {
   |> execute(block_statements, _)
   |> then(fn(result) {
     case result {
-      #([], new_parent) -> execute(other_statements, new_parent)
+      #([], Local(parent: new_parent, ..)) ->
+        execute(other_statements, new_parent)
       _ -> Error(NotImplementedError)
     }
   })
@@ -176,6 +151,27 @@ fn variable_stmt(name_token, initializer, statements, environment) {
   })
 }
 
+fn while_stmt(condition, body, other_statements, environment) {
+  evaluate(condition, environment)
+  |> then(fn(result) {
+    let #(value, environment1) = result
+    case is_truthy(value) {
+      True -> do_while_stmt(condition, body, other_statements, environment1)
+      False -> execute(other_statements, environment1)
+    }
+  })
+}
+
+fn do_while_stmt(condition, body, other_statements, environment) {
+  execute([body], environment)
+  |> then(fn(result) {
+    case result {
+      #(_stmt, new_environment) ->
+        while_stmt(condition, body, other_statements, new_environment)
+    }
+  })
+}
+
 fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
   case expression {
     Assign(name: name_token, value: expr) ->
@@ -206,10 +202,8 @@ fn do_assignment(name_token, result) {
   case result {
     #(value, environment) -> {
       environment.assign(environment, name_token, dynamic.from(value))
-      |> then(fn(env) {
-        case env {
-          new_environment -> Ok(#(dynamic.from(value), new_environment))
-        }
+      |> then(fn(new_environment) {
+        Ok(#(dynamic.from(value), new_environment))
       })
     }
   }
