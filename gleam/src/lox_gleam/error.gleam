@@ -2,19 +2,11 @@
 //// to print them.
 
 import gleam/dynamic
-import lox_gleam/token.{Token}
-import lox_gleam/ast_types.{Expr, Stmt}
 
 pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
-  ParseError(
-    message: String,
-    line: Int,
-    tokens: List(Token),
-    exprs: List(Expr),
-    stmts: List(Stmt),
-  )
+  ParseError(message: String)
   RuntimeError(message: String, values: List(dynamic.Dynamic))
   ScanError(message: String, line: Int)
   ScanInvalidNumberError

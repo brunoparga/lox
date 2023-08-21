@@ -29,13 +29,9 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
   case declaration(Ok(#([], tokens))) {
     Ok(#(statements, [])) | Ok(#(statements, [Token(token_type: Eof, ..)])) ->
       list.reverse(statements)
-    Ok(#(statements, [Token(line: line, ..)] as tokens)) -> {
+    Ok(#(_statements, [Token(..)])) -> {
       error_handler.handle_error(ParseError(
         message: "unexpected end of tokens.",
-        exprs: [],
-        line: line,
-        stmts: statements,
-        tokens: tokens,
       ))
       []
     }
@@ -53,16 +49,10 @@ fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
     Ok(#(statements, [one_token])) -> {
-      Error(ParseError(
-        message: "you might be missing a semicolon.",
-        exprs: [],
-        line: 0,
-        stmts: statements,
-        tokens: [one_token],
-      ))
+      Error(ParseError(message: "you might be missing a semicolon."))
     }
     Ok(#(statements, tokens)) -> statement(statements, tokens)
-    Error(error) -> group_errors(error)
+    Error(error) -> Error(error)
   }
 }
 
@@ -166,14 +156,7 @@ fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..new_tokens] = tokens
   case first_token.token_type {
     LeftParen -> if_condition_is_ok(statements, new_tokens)
-    _ ->
-      Error(ParseError(
-        message: "expect '(' after 'if'.",
-        line: first_token.line,
-        exprs: [],
-        stmts: statements,
-        tokens: tokens,
-      ))
+    _ -> Error(ParseError(message: "expect '(' after 'if'."))
   }
 }
 
@@ -186,14 +169,7 @@ fn if_condition_is_ok(statements, tokens) {
         let [right_paren, ..tokens2] = tokens1
         case right_paren.token_type {
           RightParen -> do_if_statement(condition, statements, tokens2)
-          _ ->
-            Error(ParseError(
-              message: "expect ')' after if condition.",
-              line: right_paren.line,
-              exprs: [],
-              stmts: statements,
-              tokens: tokens,
-            ))
+          _ -> Error(ParseError(message: "expect ')' after if condition."))
         }
       }
     }
@@ -212,14 +188,7 @@ fn do_if_statement(condition, statements, tokens) {
             if_without_else(condition, then_branch, new_statements, new_tokens)
         }
       }
-      _ ->
-        Error(ParseError(
-          message: "expected statement after 'else'.",
-          line: 0,
-          exprs: [],
-          stmts: statements,
-          tokens: tokens,
-        ))
+      #(_, [not_else, .._new_tokens]) -> Error(ParseError(message: "Error at '" <> not_else.lexeme <> "': Expect expression."))
     }
   })
 }
@@ -255,14 +224,7 @@ fn var_declaration(statements, tokens: List(Token)) {
   let [variable_name, ..tokens1] = tokens
   case variable_name.token_type {
     Identifier -> do_var_declaration(variable_name, statements, tokens1)
-    _ ->
-      Error(ParseError(
-        message: "expect variable name.",
-        line: variable_name.line,
-        exprs: [],
-        stmts: statements,
-        tokens: tokens,
-      ))
+    _ -> Error(ParseError(message: "expect variable name."))
   }
 }
 
@@ -279,10 +241,6 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
     _ ->
       Error(ParseError(
         message: "a variable declaration must be followed by an assignment or ';'.",
-        line: maybe_equal.line,
-        exprs: [],
-        stmts: statements,
-        tokens: tokens,
       ))
   }
 }
@@ -300,10 +258,6 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
           _ ->
             Error(ParseError(
               message: "a variable declaration with assignment must be followed by ';'.",
-              line: semicolon.line,
-              exprs: [],
-              stmts: statements,
-              tokens: new_tokens,
             ))
         }
       }
@@ -315,14 +269,7 @@ fn while_statement(statements, tokens) {
   let [first_token, ..new_tokens] = tokens
   case first_token.token_type {
     LeftParen -> while_condition_is_ok(statements, new_tokens)
-    _ ->
-      Error(ParseError(
-        message: "expect '(' after 'while'.",
-        line: first_token.line,
-        exprs: [],
-        stmts: statements,
-        tokens: tokens,
-      ))
+    _ -> Error(ParseError(message: "expect '(' after 'while'."))
   }
 }
 
@@ -335,14 +282,7 @@ fn while_condition_is_ok(statements, tokens) {
         let [right_paren, ..tokens2] = tokens1
         case right_paren.token_type {
           RightParen -> do_while_statement(condition, statements, tokens2)
-          _ ->
-            Error(ParseError(
-              message: "expect ')' after while condition.",
-              line: right_paren.line,
-              exprs: [],
-              stmts: statements,
-              tokens: tokens,
-            ))
+          _ -> Error(ParseError(message: "expect ')' after while condition."))
         }
       }
     }
@@ -358,13 +298,7 @@ fn do_while_statement(condition, statements, tokens) {
         declaration(Ok(#([while_stmt, ..new_statements], new_tokens)))
       }
       _ ->
-        Error(ParseError(
-          message: "expected statement as 'while' loop body.",
-          line: 0,
-          exprs: [],
-          stmts: statements,
-          tokens: tokens,
-        ))
+        Error(ParseError(message: "expected statement as 'while' loop body."))
     }
   })
 }
@@ -412,10 +346,6 @@ fn assignment(tokens) -> LoxResult(ExprAndTokens) {
       #(name_expr, []) ->
         Error(ParseError(
           message: "unexpected end of tokens when assigning variable.",
-          exprs: [name_expr],
-          line: 0,
-          stmts: [],
-          tokens: tokens,
         ))
       #(name_expr, new_tokens) -> do_assignment(name_expr, new_tokens)
     }
@@ -439,14 +369,7 @@ fn do_valid_assignment(name_expr, tokens) {
         case name_expr {
           Variable(name: name) ->
             Ok(#(Assign(name: name, value: value_expr), new_tokens))
-          _ ->
-            Error(ParseError(
-              message: "invalid assignment target.",
-              exprs: [name_expr],
-              stmts: [],
-              tokens: tokens,
-              line: 0,
-            ))
+          _ -> Error(ParseError(message: "invalid assignment target."))
         }
       }
     }
@@ -544,14 +467,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
         Literal(value: dynamic.from(Nil), line: first_token.line),
         other_tokens,
       ))
-    _ ->
-      Error(ParseError(
-        message: "unexpected token.",
-        line: first_token.line,
-        tokens: other_tokens,
-        exprs: [],
-        stmts: [],
-      ))
+    _ -> Error(ParseError(message: "unexpected token."))
   }
 }
 
@@ -567,10 +483,6 @@ fn do_grouping(first_token: Token, other_tokens) {
       #(inner_expr, [Token(lexeme: not_right_paren, ..), ..tokens2]) -> {
         Error(ParseError(
           message: "unmatched '(', got " <> not_right_paren <> " instead.",
-          line: first_token.line,
-          tokens: tokens2,
-          exprs: [inner_expr],
-          stmts: [],
         ))
       }
     }
@@ -630,32 +542,4 @@ fn build_binary(
       }
     }
   })
-}
-
-// Catch as many parse errors as we can in one fell swoop.
-fn group_errors(error) {
-  case error {
-    ParseError(
-      message: message,
-      line: line,
-      exprs: exprs,
-      tokens: tokens,
-      stmts: statements,
-    ) -> {
-      case tokens {
-        [] -> Error(error)
-        _ -> {
-          let assert Ok(#(new_expr, other_tokens)) = expression(tokens)
-          group_errors(ParseError(
-            message: message,
-            line: line,
-            exprs: [new_expr, ..exprs],
-            stmts: statements,
-            tokens: other_tokens,
-          ))
-        }
-      }
-    }
-    _ -> Error(error)
-  }
 }

@@ -9,12 +9,7 @@ pub fn handle_error(error_type) {
   let message = case error_type {
     error.ErlangError(message) ->
       "Erlang error when opening file: " <> message <> "."
-    error.ParseError(message, line, tokens, exprs, stmts) ->
-      "Parse error on line " <> int.to_string(line) <> ": " <> message <> "\nTokens left to parse: " <> string.inspect(
-        tokens,
-      ) <> "\nExpressions parsed: " <> string.inspect(exprs) <> "\nStatements parsed: " <> string.inspect(
-        stmts,
-      )
+    error.ParseError(message) -> message
     error.RuntimeError(message, values) ->
       "Runtime error: " <> message <> string.inspect(values)
     error.ScanError(message, line) ->
