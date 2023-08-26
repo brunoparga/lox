@@ -15,6 +15,7 @@ pub type Stmt {
 pub type Expr {
   Assign(name: Token, value: Expr)
   Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
+  Call(callee: Expr, paren: Token, arguments: List(Expr))
   Grouping(expression: Expr, line: Int)
   Literal(value: dynamic.Dynamic, line: Int)
   Logical(operator: TokenType, left: Expr, right: Expr, line: Int)

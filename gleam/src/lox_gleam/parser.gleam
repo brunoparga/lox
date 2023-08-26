@@ -7,17 +7,17 @@ import gleam/option
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, Logical,
-  PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
+  Assign, Binary, Block, Call, Expr, ExprStmt, Grouping, IfStmt, Literal,
+  Logical, PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
 import lox_gleam/error.{LoxResult, NotImplementedError, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  And, Bang, BangEqual, Else, Eof, Equal, EqualEqual, For, Greater, GreaterEqual,
-  Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse, LoxNil,
-  LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace, RightParen,
-  Semicolon, Slash, Star, TokenType, Var, While,
+  And, Bang, BangEqual, Comma, Else, Eof, Equal, EqualEqual, For, Greater,
+  GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse,
+  LoxNil, LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace,
+  RightParen, Semicolon, Slash, Star, TokenType, Var, While,
 }
 
 type ExprAndTokens =
@@ -396,7 +396,7 @@ fn unary(tokens) -> LoxResult(ExprAndTokens) {
   let [first_token, ..tokens1] = tokens
   case match(first_token, [Bang, Minus]) {
     True -> do_unary(first_token, tokens1)
-    False -> primary(tokens)
+    False -> call(tokens)
   }
 }
 
@@ -408,6 +408,57 @@ fn do_unary(first_token, tokens) {
     let Token(line: line, token_type: token_type, ..) = first_token
     let unary_expr = Unary(operator: token_type, right: right, line: line)
     Ok(#(unary_expr, new_tokens))
+  })
+}
+
+fn call(tokens: List(Token)) {
+  tokens
+  |> primary
+  |> then(fn(result) {
+    let #(callee, [left_paren, ..remaining_tokens] as new_tokens) = result
+    case left_paren.token_type {
+      LeftParen -> finish_call(callee, remaining_tokens)
+      _ -> Ok(#(callee, new_tokens))
+    }
+  })
+}
+
+fn finish_call(callee, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
+  let [right_paren, ..other_tokens] = tokens
+  case right_paren.token_type {
+    RightParen -> Ok(#([], right_paren, other_tokens))
+    _ -> build_arguments([], tokens)
+  }
+  |> then(fn(result) {
+    let #(arguments, closing_paren, [left_paren, ..new_tokens]) = result
+    case list.length(arguments) {
+      n if n >= 255 ->
+        Error(ParseError(message: "Can't have more than 255 arguments."))
+      _ -> {
+        let call_expr =
+          Call(callee: callee, paren: closing_paren, arguments: arguments)
+          case left_paren.token_type {
+            LeftParen -> finish_call(call_expr, new_tokens)
+            _ -> Ok(#(call_expr, new_tokens))
+        }
+      }
+    }
+  })
+}
+
+fn build_arguments(
+  arguments,
+  tokens,
+) -> LoxResult(#(List(Expr), Token, List(Token))) {
+  tokens
+  |> expression
+  |> then(fn(result) {
+    let #(argument, [comma_or_paren, ..new_tokens]) = result
+    case comma_or_paren.token_type {
+      RightParen -> Ok(#([argument, ..arguments], comma_or_paren, new_tokens))
+      Comma -> build_arguments([argument, ..arguments], new_tokens)
+      _ -> Error(ParseError(message: "Expect ')' after arguments."))
+    }
   })
 }
 
