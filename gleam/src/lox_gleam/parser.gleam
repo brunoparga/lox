@@ -5,6 +5,7 @@ import gleam/dynamic
 import gleam/list
 import gleam/option
 import gleam/result.{then}
+import gleam/string
 import lox_gleam/ast_types.{
   Assign, Binary, Block, Expr, ExprStmt, Grouping, IfStmt, Literal, Logical,
   PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
@@ -48,9 +49,8 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
 fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
-    Ok(#(statements, [one_token])) -> {
+    Ok(#(_statements, [_one_token])) ->
       Error(ParseError(message: "you might be missing a semicolon."))
-    }
     Ok(#(statements, tokens)) -> statement(statements, tokens)
     Error(error) -> Error(error)
   }
@@ -73,10 +73,8 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
 
 fn for_statement(statements, tokens: List(Token)) {
   let stmt_extractor = fn(result) {
-    case result {
-      #([stmt, ..new_statements], new_tokens) ->
-        Ok(#(option.Some(stmt), new_statements, new_tokens))
-    }
+    let #([stmt, ..new_statements], new_tokens) = result
+    Ok(#(option.Some(stmt), new_statements, new_tokens))
   }
   let [first_token, ..tokens1] = tokens
   case first_token.token_type {
@@ -164,14 +162,10 @@ fn if_condition_is_ok(statements, tokens) {
   tokens
   |> expression
   |> then(fn(result) {
-    case result {
-      #(condition, tokens1) -> {
-        let [right_paren, ..tokens2] = tokens1
-        case right_paren.token_type {
-          RightParen -> do_if_statement(condition, statements, tokens2)
-          _ -> Error(ParseError(message: "expect ')' after if condition."))
-        }
-      }
+    let #(condition, [right_paren, ..new_tokens]) = result
+    case right_paren.token_type {
+      RightParen -> do_if_statement(condition, statements, new_tokens)
+      _ -> Error(ParseError(message: "expect ')' after if condition."))
     }
   })
 }
@@ -188,7 +182,10 @@ fn do_if_statement(condition, statements, tokens) {
             if_without_else(condition, then_branch, new_statements, new_tokens)
         }
       }
-      #(_, [not_else, .._new_tokens]) -> Error(ParseError(message: "Error at '" <> not_else.lexeme <> "': Expect expression."))
+      #(_, [not_else, ..]) ->
+        Error(ParseError(
+          message: "Error at '" <> not_else.lexeme <> "': Expect expression.",
+        ))
     }
   })
 }
@@ -196,17 +193,14 @@ fn do_if_statement(condition, statements, tokens) {
 fn if_then_else(condition, then_branch, statements, tokens) {
   statement(statements, tokens)
   |> then(fn(result) {
-    case result {
-      #([else_branch, ..new_statements], new_tokens) -> {
-        let if_else_stmt =
-          IfStmt(
-            condition: condition,
-            then_branch: then_branch,
-            else_branch: option.Some(else_branch),
-          )
-        declaration(Ok(#([if_else_stmt, ..new_statements], new_tokens)))
-      }
-    }
+    let #([else_branch, ..new_statements], new_tokens) = result
+    let if_else_stmt =
+      IfStmt(
+        condition: condition,
+        then_branch: then_branch,
+        else_branch: option.Some(else_branch),
+      )
+    declaration(Ok(#([if_else_stmt, ..new_statements], new_tokens)))
   })
 }
 
@@ -248,19 +242,16 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
 fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
   expression(tokens)
   |> then(fn(result) {
-    case result {
-      #(expr, [semicolon, ..new_tokens]) -> {
-        case semicolon.token_type {
-          Semicolon -> {
-            let var_statement = VarStmt(name: name, initializer: expr)
-            Ok(#([var_statement, ..statements], new_tokens))
-          }
-          _ ->
-            Error(ParseError(
-              message: "a variable declaration with assignment must be followed by ';'.",
-            ))
-        }
+    let #(expr, [semicolon, ..new_tokens]) = result
+    case semicolon.token_type {
+      Semicolon -> {
+        let var_statement = VarStmt(name: name, initializer: expr)
+        Ok(#([var_statement, ..statements], new_tokens))
       }
+      _ ->
+        Error(ParseError(
+          message: "a variable declaration with assignment must be followed by ';'.",
+        ))
     }
   })
 }
@@ -277,14 +268,10 @@ fn while_condition_is_ok(statements, tokens) {
   tokens
   |> expression
   |> then(fn(result) {
-    case result {
-      #(condition, tokens1) -> {
-        let [right_paren, ..tokens2] = tokens1
-        case right_paren.token_type {
-          RightParen -> do_while_statement(condition, statements, tokens2)
-          _ -> Error(ParseError(message: "expect ')' after while condition."))
-        }
-      }
+    let #(condition, [right_paren, ..new_tokens]) = result
+    case right_paren.token_type {
+      RightParen -> do_while_statement(condition, statements, new_tokens)
+      _ -> Error(ParseError(message: "expect ')' after while condition."))
     }
   })
 }
@@ -310,12 +297,9 @@ fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) 
     _ -> {
       declaration(Ok(#([], tokens)))
       |> then(fn(result) {
-        case result {
-          #(block_statements, new_tokens) -> {
-            let block = Block(list.reverse(block_statements))
-            Ok(#([block, ..existing_statements], new_tokens))
-          }
-        }
+        let #(block_statements, new_tokens) = result
+        let block = Block(list.reverse(block_statements))
+        Ok(#([block, ..existing_statements], new_tokens))
       })
     }
   }
@@ -325,12 +309,9 @@ fn do_statement(statements, tokens, stmt_type) {
   tokens
   |> expression
   |> then(fn(result) {
-    case result {
-      #(expr, [Token(token_type: Semicolon, ..), ..new_tokens]) -> {
-        let new_statement = stmt_type(expr)
-        declaration(Ok(#([new_statement, ..statements], new_tokens)))
-      }
-    }
+    let #(expr, [Token(token_type: Semicolon, ..), ..new_tokens]) = result
+    let new_statement = stmt_type(expr)
+    declaration(Ok(#([new_statement, ..statements], new_tokens)))
   })
 }
 
@@ -345,14 +326,16 @@ fn assignment(tokens) -> LoxResult(ExprAndTokens) {
     case result {
       #(name_expr, []) ->
         Error(ParseError(
-          message: "unexpected end of tokens when assigning variable.",
+          message: "unexpected end of tokens when assigning variable" <> string.inspect(
+            name_expr,
+          ) <> ".",
         ))
       #(name_expr, new_tokens) -> do_assignment(name_expr, new_tokens)
     }
   })
 }
 
-fn do_assignment(name_expr, tokens) -> LoxResult(ExprAndTokens) {
+fn do_assignment(name_expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [equals, ..tokens1] = tokens
   case equals.token_type {
     Equal -> do_valid_assignment(name_expr, tokens1)
@@ -364,14 +347,11 @@ fn do_valid_assignment(name_expr, tokens) {
   tokens
   |> assignment
   |> then(fn(result) {
-    case result {
-      #(value_expr, new_tokens) -> {
-        case name_expr {
-          Variable(name: name) ->
-            Ok(#(Assign(name: name, value: value_expr), new_tokens))
-          _ -> Error(ParseError(message: "invalid assignment target."))
-        }
-      }
+    let #(value_expr, new_tokens) = result
+    case name_expr {
+      Variable(name: name) ->
+        Ok(#(Assign(name: name, value: value_expr), new_tokens))
+      _ -> Error(ParseError(message: "invalid assignment target."))
     }
   })
 }
@@ -424,13 +404,10 @@ fn do_unary(first_token, tokens) {
   tokens
   |> unary
   |> then(fn(result) {
-    case result {
-      #(right, new_tokens) -> {
-        let Token(line: line, token_type: token_type, ..) = first_token
-        let unary_expr = Unary(operator: token_type, right: right, line: line)
-        Ok(#(unary_expr, new_tokens))
-      }
-    }
+    let #(right, new_tokens) = result
+    let Token(line: line, token_type: token_type, ..) = first_token
+    let unary_expr = Unary(operator: token_type, right: right, line: line)
+    Ok(#(unary_expr, new_tokens))
   })
 }
 
@@ -480,7 +457,7 @@ fn do_grouping(first_token: Token, other_tokens) {
         let expr = Grouping(expression: inner_expr, line: first_token.line)
         Ok(#(expr, tokens2))
       }
-      #(inner_expr, [Token(lexeme: not_right_paren, ..), ..tokens2]) -> {
+      #(_inner_expr, [Token(lexeme: not_right_paren, ..), ..]) -> {
         Error(ParseError(
           message: "unmatched '(', got " <> not_right_paren <> " instead.",
         ))
@@ -497,10 +474,8 @@ fn binary_inner(token_types, function, expr_type) {
   fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
     expr_and_tokens
     |> then(fn(result) {
-      case result {
-        #(expr, tokens) ->
-          happy_path(token_types, function, expr_type)(expr, tokens)
-      }
+      let #(expr, tokens) = result
+      happy_path(token_types, function, expr_type)(expr, tokens)
     })
   }
 }
@@ -534,12 +509,9 @@ fn build_binary(
   other_tokens
   |> function
   |> then(fn(result) {
-    case result {
-      #(right, tokens2) -> {
-        let Token(line: line, token_type: token_type, ..) = first_token
-        let binary = expr_type(token_type, left, right, line)
-        binary_inner(token_types, function, expr_type)(Ok(#(binary, tokens2)))
-      }
-    }
+    let #(right, tokens2) = result
+    let Token(line: line, token_type: token_type, ..) = first_token
+    let binary = expr_type(token_type, left, right, line)
+    binary_inner(token_types, function, expr_type)(Ok(#(binary, tokens2)))
   })
 }

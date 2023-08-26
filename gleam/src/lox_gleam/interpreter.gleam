@@ -118,36 +118,30 @@ fn block(block_statements, other_statements, environment) {
 fn expression_stmt(expression, statements, environment) {
   evaluate(expression, environment)
   |> then(fn(result) {
-    case result {
-      #(_value, new_environment) -> do_execute(statements, new_environment)
-    }
+    let #(_value, new_environment) = result
+    do_execute(statements, new_environment)
   })
 }
 
 fn print_stmt(expression, statements, environment) {
   evaluate(expression, environment)
   |> then(fn(result) {
-    case result {
-      #(value, new_environment) -> {
-        value
-        |> string.inspect()
-        |> io.println()
-        do_execute(statements, new_environment)
-      }
-    }
+    let #(value, new_environment) = result
+
+    value
+    |> string.inspect()
+    |> io.println()
+    do_execute(statements, new_environment)
   })
 }
 
 fn variable_stmt(name_token, initializer, statements, environment) {
   evaluate(initializer, environment)
   |> then(fn(result) {
-    case result {
-      #(value, environment1) -> {
-        let environment2 =
-          environment.define(environment1, name_token.lexeme, value)
-        do_execute(statements, environment2)
-      }
-    }
+    let #(value, environment1) = result
+    let environment2 =
+      environment.define(environment1, name_token.lexeme, value)
+    do_execute(statements, environment2)
   })
 }
 
@@ -165,10 +159,8 @@ fn while_stmt(condition, body, other_statements, environment) {
 fn do_while_stmt(condition, body, other_statements, environment) {
   execute([body], environment)
   |> then(fn(result) {
-    case result {
-      #(_stmt, new_environment) ->
-        while_stmt(condition, body, other_statements, new_environment)
-    }
+    let #(_stmt, new_environment) = result
+    while_stmt(condition, body, other_statements, new_environment)
   })
 }
 
@@ -199,14 +191,9 @@ fn evaluate_assignment(
 }
 
 fn do_assignment(name_token, result) {
-  case result {
-    #(value, environment) -> {
-      environment.assign(environment, name_token, dynamic.from(value))
-      |> then(fn(new_environment) {
-        Ok(#(dynamic.from(value), new_environment))
-      })
-    }
-  }
+  let #(value, environment) = result
+  environment.assign(environment, name_token, dynamic.from(value))
+  |> then(fn(new_environment) { Ok(#(dynamic.from(value), new_environment)) })
 }
 
 fn evaluate_binary(
