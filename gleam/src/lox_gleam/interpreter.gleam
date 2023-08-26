@@ -8,8 +8,8 @@ import gleam/option.{None, Some}
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, ExprStmt, Grouping, IfStmt, Literal, Logical, PrintStmt,
-  Stmt, Unary, VarStmt, Variable, WhileStmt,
+  Assign, Binary, Block, Call, ExprStmt, Grouping, IfStmt, Literal, Logical,
+  PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
@@ -170,6 +170,7 @@ fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
       evaluate_assignment(name_token, expr, environment)
     Binary(operator, left, right, ..) ->
       evaluate_binary(operator, left, right, environment)
+    Call(..) -> evaluate_call(expression, environment)
     Grouping(expression, ..) -> evaluate(expression, environment)
     Literal(value, ..) -> Ok(#(value, environment))
     Logical(operator, left, right, ..) ->
@@ -311,6 +312,32 @@ fn evaluate_binary(
         values: [left_value, right_value],
       ))
   }
+}
+
+fn evaluate_call(call_expr, environment) {
+  let assert Call(callee, paren, arguments) = call_expr
+  evaluate(callee, environment)
+  |> then(fn(result) {
+    let #(callee_value, environment1) = result
+    list.fold(
+      arguments,
+      Ok(#([], environment1)),
+      fn(accumulator, argument) {
+        let assert Ok(#(current_args, current_env)) = accumulator
+        let assert Ok(#(argument_value, environment2)) =
+          evaluate(argument, current_env)
+        Ok(#([argument_value, ..current_args], environment2))
+      },
+    )
+    |> then(fn(result1) {
+      let #(argument_values, environment2) = result1
+      // This is where the "LoxCallable" stuff will come
+      todo
+    })
+  })
+  // Check that `callee_value` is callable
+  // Check that `list.length(argument_values) == function.arity`
+  // Call function with its arguments
 }
 
 fn evaluate_logical(operator, left_expr, right_expr, environment) {

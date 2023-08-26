@@ -437,9 +437,9 @@ fn finish_call(callee, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
       _ -> {
         let call_expr =
           Call(callee: callee, paren: closing_paren, arguments: arguments)
-          case left_paren.token_type {
-            LeftParen -> finish_call(call_expr, new_tokens)
-            _ -> Ok(#(call_expr, new_tokens))
+        case left_paren.token_type {
+          LeftParen -> finish_call(call_expr, new_tokens)
+          _ -> Ok(#(call_expr, new_tokens))
         }
       }
     }
