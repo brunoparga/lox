@@ -1,7 +1,11 @@
 program       -> declaration* EOF ;
 
-declaration   -> varDecl
+declaration   -> funDecl
+               | varDecl
                | statement ;
+funDecl       -> "fun" function ;
+function      -> IDENTIFIER "(" parameters? ")" block ;
+parameters    -> IDENTIFIER ( "," IDENTIFIER )* ;
 varDecl       -> "var" IDENTIFIER ( "=" expression )? ";" ;
 
 statement     -> exprStmt
@@ -11,7 +15,7 @@ statement     -> exprStmt
                | whileStmt
                | block ;
 exprStmt      -> expression ";" ;
-forStmt       -> "for" "(" varDecl | exprStmt | ";" )
+forStmt       -> "for" "(" ( varDecl | exprStmt | ";" )
                  expression? ";"
                  expression? ")" statement ;
 ifStmt        -> "if" "(" expression ")" statement
