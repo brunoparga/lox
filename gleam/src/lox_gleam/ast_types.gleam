@@ -6,6 +6,7 @@ import lox_gleam/token_type.{TokenType}
 pub type Stmt {
   Block(statements: List(Stmt))
   ExprStmt(expression: Expr)
+  FunDecl(name: Token, params: List(Token), body: List(Stmt))
   IfStmt(condition: Expr, then_branch: Stmt, else_branch: option.Option(Stmt))
   PrintStmt(expression: Expr)
   VarDecl(name: Token, initializer: Expr)

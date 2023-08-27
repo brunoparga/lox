@@ -7,14 +7,14 @@ import gleam/option
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
-  Assign, Binary, Block, Call, Expr, ExprStmt, Grouping, IfStmt, Literal,
-  Logical, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
+  Assign, Binary, Block, Call, Expr, ExprStmt, FunDecl, Grouping, IfStmt,
+  Literal, Logical, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/error.{LoxResult, NotImplementedError, ParseError}
 import lox_gleam/error_handler
 import lox_gleam/token.{Token}
 import lox_gleam/token_type.{
-  And, Bang, BangEqual, Comma, Else, Eof, Equal, EqualEqual, For, Greater,
+  And, Bang, BangEqual, Comma, Else, Eof, Equal, EqualEqual, For, Fun, Greater,
   GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse,
   LoxNil, LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace,
   RightParen, Semicolon, Slash, Star, TokenType, Var, While,
@@ -61,6 +61,8 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   case first_token.token_type {
     Else -> Ok(#(statements, tokens))
     For -> for_statement(statements, other_tokens)
+    Fun ->
+      declaration(function_declaration("function", statements, other_tokens))
     If -> if_statement(statements, other_tokens)
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
@@ -68,6 +70,47 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
     Var -> declaration(var_declaration(statements, other_tokens))
     While -> while_statement(statements, other_tokens)
     _ -> do_statement(statements, tokens, ExprStmt)
+  }
+}
+
+fn function_declaration(kind, statements, tokens: List(Token)) {
+  let [name_token, left_paren, next_token, ..tokens1] = tokens
+  case name_token.token_type, left_paren.token_type, next_token.token_type {
+    // No parameters
+    Identifier, LeftParen, RightParen -> Ok(#([], tokens1))
+    // Yes parameters
+    Identifier, LeftParen, _ -> build_params([], [next_token, ..tokens1])
+    Identifier, _, _ ->
+      Error(ParseError("Expect '(' after " <> kind <> " name."))
+    _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
+  }
+  |> then(fn(result) {
+    let #(parameters, tokens2) = result
+    case list.length(parameters) >= 255 {
+      True -> Error(ParseError("Can't have more than 255 parameters."))
+      False ->
+        block(statements, tokens2)
+        |> then(fn(result1) {
+          let assert #([Block(statements: body), ..statements], tokens3) =
+            result1
+          let fun_declaration =
+            FunDecl(name: name_token, params: parameters, body: body)
+          Ok(#([fun_declaration, ..statements], tokens3))
+        })
+    }
+  })
+}
+
+fn build_params(
+  params,
+  tokens: List(Token),
+) -> LoxResult(#(List(Token), List(Token))) {
+  let [param, comma_or_paren, ..new_tokens] = tokens
+  case param.token_type, comma_or_paren.token_type {
+    Identifier, RightParen -> Ok(#([param, ..params], new_tokens))
+    Identifier, Comma -> build_params([param, ..params], new_tokens)
+    Identifier, _ -> Error(ParseError("Expect ')' after parameters."))
+    _, _ -> Error(ParseError("Expect parameter name."))
   }
 }
 
@@ -439,7 +482,9 @@ fn finish_call(callee, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
           Call(callee: callee, paren: closing_paren, arguments: arguments)
         case left_paren.token_type {
           LeftParen -> finish_call(call_expr, new_tokens)
-          _ -> Ok(#(call_expr, new_tokens))
+          // `left_paren` here is actually a semicolon, needed for matching
+          // at `do_statement`
+          _ -> Ok(#(call_expr, [left_paren, ..new_tokens]))
         }
       }
     }
