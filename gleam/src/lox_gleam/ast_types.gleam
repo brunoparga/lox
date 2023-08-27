@@ -8,7 +8,7 @@ pub type Stmt {
   ExprStmt(expression: Expr)
   IfStmt(condition: Expr, then_branch: Stmt, else_branch: option.Option(Stmt))
   PrintStmt(expression: Expr)
-  VarStmt(name: Token, initializer: Expr)
+  VarDecl(name: Token, initializer: Expr)
   WhileStmt(condition: Expr, body: Stmt)
 }
 

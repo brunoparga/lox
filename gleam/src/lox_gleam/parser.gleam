@@ -8,7 +8,7 @@ import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
   Assign, Binary, Block, Call, Expr, ExprStmt, Grouping, IfStmt, Literal,
-  Logical, PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
+  Logical, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/error.{LoxResult, NotImplementedError, ParseError}
 import lox_gleam/error_handler
@@ -229,8 +229,8 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
       var_declaration_with_assignment(variable_name, statements, new_tokens)
     Semicolon -> {
       let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
-      let var_statement = VarStmt(name: variable_name, initializer: nil_expr)
-      Ok(#([var_statement, ..statements], new_tokens))
+      let var_declaration = VarDecl(name: variable_name, initializer: nil_expr)
+      Ok(#([var_declaration, ..statements], new_tokens))
     }
     _ ->
       Error(ParseError(
@@ -245,8 +245,8 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
     let #(expr, [semicolon, ..new_tokens]) = result
     case semicolon.token_type {
       Semicolon -> {
-        let var_statement = VarStmt(name: name, initializer: expr)
-        Ok(#([var_statement, ..statements], new_tokens))
+        let var_declaration = VarDecl(name: name, initializer: expr)
+        Ok(#([var_declaration, ..statements], new_tokens))
       }
       _ ->
         Error(ParseError(

@@ -9,7 +9,7 @@ import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
   Assign, Binary, Block, Call, ExprStmt, Grouping, IfStmt, Literal, Logical,
-  PrintStmt, Stmt, Unary, VarStmt, Variable, WhileStmt,
+  PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
@@ -50,8 +50,8 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
         IfStmt(..) -> if_stmt(statement, other_statements, environment)
         PrintStmt(expression: expression) ->
           print_stmt(expression, other_statements, environment)
-        VarStmt(name, initializer) ->
-          variable_stmt(name, initializer, other_statements, environment)
+        VarDecl(name, initializer) ->
+          variable_declaration(name, initializer, other_statements, environment)
         WhileStmt(condition, body) ->
           while_stmt(condition, body, other_statements, environment)
       }
@@ -135,7 +135,7 @@ fn print_stmt(expression, statements, environment) {
   })
 }
 
-fn variable_stmt(name_token, initializer, statements, environment) {
+fn variable_declaration(name_token, initializer, statements, environment) {
   evaluate(initializer, environment)
   |> then(fn(result) {
     let #(value, environment1) = result
