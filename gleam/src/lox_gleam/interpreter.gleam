@@ -5,15 +5,17 @@ import gleam/dynamic.{Dynamic}
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
+import gleam/pair
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/ast_types.{
   Assign, Binary, Block, Call, ExprStmt, FunDecl, Grouping, IfStmt, Literal,
-  Logical, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
+  Logical, LoxFunction, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
 import lox_gleam/error_handler
+import lox_gleam/token
 import lox_gleam/token_type.{
   And, Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual,
   Minus, Or, Plus, Slash, Star, TokenType,
@@ -43,11 +45,15 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
     _ -> {
       let [statement, ..other_statements] = statements
       case statement {
-        Block(block_statements) ->
-          block(block_statements, other_statements, environment)
+        Block(block_statements) -> {
+          block(block_statements, environment)
+          |> then(fn(new_environment) {
+            execute(other_statements, new_environment)
+          })
+        }
         ExprStmt(expression: expression) ->
           expression_stmt(expression, other_statements, environment)
-        FunDecl(..) -> todo
+        FunDecl(..) -> fun_declaration(statement, other_statements, environment)
         IfStmt(..) -> if_stmt(statement, other_statements, environment)
         PrintStmt(expression: expression) ->
           print_stmt(expression, other_statements, environment)
@@ -58,6 +64,19 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
       }
     }
   }
+}
+
+fn fun_declaration(fun_decl, other_statements, environment) {
+  let assert FunDecl(name: name_token, params: params, ..) = fun_decl
+  let function =
+    LoxFunction(
+      arity: list.length(params),
+      to_string: "<fn " <> name_token.lexeme <> ">",
+      declaration: fun_decl,
+    )
+  let environment1 =
+    environment.define(environment, name_token.lexeme, dynamic.from(function))
+  do_execute(other_statements, environment1)
 }
 
 fn if_stmt(
@@ -102,15 +121,14 @@ fn do_else_branch(else_branch, other_statements, environment) {
   }
 }
 
-fn block(block_statements, other_statements, environment) {
+fn block(block_statements, environment) {
   environment
   |> Some()
   |> environment.create()
   |> execute(block_statements, _)
   |> then(fn(result) {
     case result {
-      #([], Local(parent: new_parent, ..)) ->
-        execute(other_statements, new_parent)
+      #([], Local(parent: new_parent, ..)) -> Ok(new_parent)
       _ -> Error(NotImplementedError)
     }
   })
@@ -315,30 +333,72 @@ fn evaluate_binary(
   }
 }
 
-fn evaluate_call(call_expr, environment) {
-  let assert Call(callee, paren, arguments) = call_expr
+fn evaluate_call(call_expr, environment) -> LoxResult(#(Dynamic, Environment)) {
+  let assert Call(callee, _paren, arguments) = call_expr
   evaluate(callee, environment)
   |> then(fn(result) {
     let #(callee_value, environment1) = result
-    list.fold(
-      arguments,
-      Ok(#([], environment1)),
-      fn(accumulator, argument) {
-        let assert Ok(#(current_args, current_env)) = accumulator
-        let assert Ok(#(argument_value, environment2)) =
-          evaluate(argument, current_env)
-        Ok(#([argument_value, ..current_args], environment2))
-      },
-    )
-    |> then(fn(result1) {
-      let #(argument_values, environment2) = result1
-      // This is where the "LoxCallable" stuff will come
-      todo
+    let initial_env = Ok(#([], environment1))
+    list.fold(arguments, initial_env, evaluate_arguments)
+    |> result.map(fn(args_and_environment) {
+      let #(args, env) = args_and_environment
+      #(callee_value, args, env)
     })
   })
+  |> then(call_function)
+}
+
+fn evaluate_arguments(accumulator, argument) {
+  let assert Ok(#(current_args, current_env)) = accumulator
+  let assert Ok(#(argument_value, environment2)) =
+    evaluate(argument, current_env)
+  Ok(#([argument_value, ..current_args], environment2))
+}
+
+fn call_function(result) {
+  let #(callee_value, argument_values, environment2) = result
   // Check that `callee_value` is callable
-  // Check that `list.length(argument_values) == function.arity`
-  // Call function with its arguments
+  let decoded_callee = dynamic.unsafe_coerce(callee_value)
+  case decoded_callee {
+    LoxFunction(arity: arity, declaration: declaration, ..) -> {
+      let assert FunDecl(params: params, body: body, ..) = declaration
+      let args_length = list.length(argument_values)
+      case args_length == arity {
+        True -> do_call_function(params, argument_values, body, environment2)
+        False ->
+          Error(RuntimeError(
+            message: "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
+              args_length,
+            ),
+            values: [],
+          ))
+      }
+    }
+    _ ->
+      Error(RuntimeError(
+        message: "Can only call functions and classes.",
+        values: [],
+      ))
+  }
+}
+
+fn do_call_function(params: List(token.Token), arguments, body, environment) {
+  let fun_environment = environment.create(Some(environment))
+  params
+  |> list.zip(with: arguments)
+  |> list.fold(
+    from: fun_environment,
+    with: fn(current_env, param_arg_pair) {
+      environment.define(
+        current_env,
+        pair.first(param_arg_pair).lexeme,
+        pair.second(param_arg_pair),
+      )
+    },
+  )
+  |> block(body, _)
+
+  Ok(#(dynamic.from(Nil), environment))
 }
 
 fn evaluate_logical(operator, left_expr, right_expr, environment) {

@@ -23,3 +23,8 @@ pub type Expr {
   Unary(operator: TokenType, right: Expr, line: Int)
   Variable(name: Token)
 }
+
+pub type LoxCallable {
+  // The type of `declaration` is always `FunDecl`
+  LoxFunction(arity: Int, declaration: Stmt, to_string: String)
+}

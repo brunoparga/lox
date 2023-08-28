@@ -217,12 +217,17 @@ fn do_if_statement(condition, statements, tokens) {
   statement(statements, tokens)
   |> then(fn(result) {
     case result {
-      #([then_branch, ..new_statements], [else, ..new_tokens]) -> {
+      #([then_branch, ..new_statements], [else, ..new_tokens] as result_tokens) -> {
         case else.token_type {
           Else ->
             if_then_else(condition, then_branch, new_statements, new_tokens)
           _ ->
-            if_without_else(condition, then_branch, new_statements, new_tokens)
+            if_without_else(
+              condition,
+              then_branch,
+              new_statements,
+              result_tokens,
+            )
         }
       }
       #(_, [not_else, ..]) ->
