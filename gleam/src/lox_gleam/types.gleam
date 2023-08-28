@@ -1,7 +1,4 @@
-import gleam/dynamic
 import gleam/option
-import lox_gleam/token.{Token}
-import lox_gleam/token_type.{TokenType}
 
 pub type Stmt {
   Block(statements: List(Stmt))
@@ -18,13 +15,70 @@ pub type Expr {
   Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
   Call(callee: Expr, paren: Token, arguments: List(Expr))
   Grouping(expression: Expr, line: Int)
-  Literal(value: dynamic.Dynamic, line: Int)
+  Literal(value: LoxValue, line: Int)
   Logical(operator: TokenType, left: Expr, right: Expr, line: Int)
   Unary(operator: TokenType, right: Expr, line: Int)
   Variable(name: Token)
 }
 
-pub type LoxCallable {
-  // The type of `declaration` is always `FunDecl`
+pub type Token {
+  Token(token_type: TokenType, value: LoxValue, line: Int)
+}
+
+pub type LoxValue {
+  LoxBool(Bool)
   LoxFunction(arity: Int, declaration: Stmt, to_string: String)
+  LoxNil
+  LoxNumber(Float)
+  LoxString(String)
+}
+
+pub type TokenType {
+  // Single-character tokens
+  LeftParen
+  RightParen
+  LeftBrace
+  RightBrace
+  Comma
+  Dot
+  Semicolon
+  Plus
+  Minus
+  Star
+  Slash
+
+  // One or two character tokens
+  Bang
+  BangEqual
+  Equal
+  EqualEqual
+  Greater
+  GreaterEqual
+  Less
+  LessEqual
+
+  // Literals
+  Identifier
+  StringToken
+  NumberToken
+
+  // Keywords
+  And
+  Class
+  Else
+  FalseToken
+  For
+  Fun
+  If
+  NilToken
+  Or
+  Print
+  Return
+  Super
+  This
+  TrueToken
+  Var
+  While
+
+  Eof
 }

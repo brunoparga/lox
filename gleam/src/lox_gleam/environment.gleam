@@ -2,15 +2,15 @@
 //// environment and a map that records the value assigned to each
 //// variable in the current environment.
 
-import gleam/dynamic
 import gleam/map
 import gleam/option
 import gleam/result
+import gleam/string
 import lox_gleam/error
-import lox_gleam/token
+import lox_gleam/types.{LoxValue}
 
 type Table =
-  map.Map(String, dynamic.Dynamic)
+  map.Map(LoxValue, LoxValue)
 
 pub type Environment {
   Global(table: Table)
@@ -26,8 +26,8 @@ pub fn create(parent: option.Option(Environment)) -> Environment {
 
 pub fn define(
   environment: Environment,
-  name: String,
-  value: dynamic.Dynamic,
+  name: LoxValue,
+  value: LoxValue,
 ) -> Environment {
   case environment {
     Global(table: table) ->
@@ -41,16 +41,16 @@ pub fn define(
 
 pub fn assign(
   environment: Environment,
-  name_token: token.Token,
-  value: dynamic.Dynamic,
+  name_token: types.Token,
+  value: LoxValue,
 ) -> error.LoxResult(Environment) {
   let #(is_global, table) = is_global(environment)
-  case is_global, map.has_key(table, name_token.lexeme) {
+  case is_global, map.has_key(table, name_token.value) {
     True, True ->
-      Ok(Global(map.insert(into: table, for: name_token.lexeme, insert: value)))
+      Ok(Global(map.insert(into: table, for: name_token.value, insert: value)))
     False, True -> {
       let new_table =
-        map.insert(into: table, for: name_token.lexeme, insert: value)
+        map.insert(into: table, for: name_token.value, insert: value)
       let assert Local(parent: parent, ..) = environment
       Ok(Local(parent: parent, table: new_table))
     }
@@ -58,25 +58,21 @@ pub fn assign(
       let assert Local(parent: parent, ..) = environment
       assign(parent, name_token, value)
       |> result.then(fn(new_parent) {
-        case environment {
-          Local(table: table, ..) -> Ok(Local(parent: new_parent, table: table))
-          // This is unreachable.
-          Global(..) -> Error(error.NotImplementedError)
-        }
+        let assert Local(table: table, ..) = environment
+        Ok(Local(parent: new_parent, table: table))
       })
     }
     True, False ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> name_token.lexeme <> "'.",
-        values: [value],
+        message: "undefined variable '" <> string.inspect(name_token.value) <> "'.",
       ))
   }
 }
 
 pub fn get(
   environment: Environment,
-  variable: String,
-) -> error.LoxResult(#(dynamic.Dynamic, Environment)) {
+  variable: LoxValue,
+) -> error.LoxResult(#(LoxValue, Environment)) {
   let #(is_global, table) = is_global(environment)
   case is_global, map.get(table, variable) {
     _, Ok(value) -> Ok(#(value, environment))
@@ -91,8 +87,7 @@ pub fn get(
     }
     True, Error(Nil) ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> variable <> "'.",
-        values: [],
+        message: "undefined variable '" <> string.inspect(variable) <> "'.",
       ))
   }
 }

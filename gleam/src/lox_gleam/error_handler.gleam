@@ -1,7 +1,6 @@
 import gleam/int
 import gleam/io
 import gleam/option
-import gleam/string
 import lox_gleam/environment
 import lox_gleam/error
 
@@ -10,8 +9,7 @@ pub fn handle_error(error_type) {
     error.ErlangError(message) ->
       "Erlang error when opening file: " <> message <> "."
     error.ParseError(message) -> message
-    error.RuntimeError(message, values) ->
-      "Runtime error: " <> message <> string.inspect(values)
+    error.RuntimeError(message) -> "Runtime error: " <> message
     error.ScanError(message, line) ->
       "Scan error on line " <> int.to_string(line) <> ": " <> message
     error.TooManyArgumentsError ->

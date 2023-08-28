@@ -1,25 +1,23 @@
 //// Expose `interpret`, which takes an abstract syntax tree and
 //// processes it accoding to the rules of the Lox language.
 
-import gleam/dynamic.{Dynamic}
+import gleam/float
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result.{then}
 import gleam/string
-import lox_gleam/ast_types.{
-  Assign, Binary, Block, Call, ExprStmt, FunDecl, Grouping, IfStmt, Literal,
-  Logical, LoxFunction, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
+import lox_gleam/types.{
+  And, Assign, Bang, BangEqual, Binary, Block, Call, EqualEqual, ExprStmt,
+  FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual, Literal,
+  Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString, LoxValue, Minus,
+  Or, Plus, PrintStmt, Slash, Star, Stmt, TokenType, Unary, VarDecl, Variable,
+  WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
-import lox_gleam/error.{LoxResult, NotImplementedError, RuntimeError}
+import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/error_handler
-import lox_gleam/token
-import lox_gleam/token_type.{
-  And, Bang, BangEqual, EqualEqual, Greater, GreaterEqual, Less, LessEqual,
-  Minus, Or, Plus, Slash, Star, TokenType,
-}
 
 pub fn interpret(statements: List(Stmt), environment) -> Environment {
   case execute(statements, environment) {
@@ -71,11 +69,10 @@ fn fun_declaration(fun_decl, other_statements, environment) {
   let function =
     LoxFunction(
       arity: list.length(params),
-      to_string: "<fn " <> name_token.lexeme <> ">",
+      to_string: "<fn " <> string.inspect(name_token.value) <> ">",
       declaration: fun_decl,
     )
-  let environment1 =
-    environment.define(environment, name_token.lexeme, dynamic.from(function))
+  let environment1 = environment.define(environment, name_token.value, function)
   do_execute(other_statements, environment1)
 }
 
@@ -88,37 +85,22 @@ fn if_stmt(
   evaluate(condition, environment)
   |> then(fn(result) {
     let #(value, new_environment) = result
-    case is_truthy(value) {
-      True -> do_then_branch(then_branch, other_statements, new_environment)
-      False -> do_else_branch(else_branch, other_statements, new_environment)
+    case is_truthy(value), else_branch {
+      True, _ -> do_branch(then_branch, other_statements, new_environment)
+      False, Some(else_branch) ->
+        do_branch(else_branch, other_statements, new_environment)
+      False, None -> execute(other_statements, environment)
     }
   })
 }
 
-fn do_then_branch(statement, other_statements, environment) {
+fn do_branch(statement, other_statements, environment) {
   [statement]
   |> execute(environment)
-  |> result.then(fn(result) {
-    case result {
-      #([], new_environment) -> execute(other_statements, new_environment)
-      _ -> Error(NotImplementedError)
-    }
+  |> then(fn(result) {
+    let assert #([], new_environment) = result
+    execute(other_statements, new_environment)
   })
-}
-
-fn do_else_branch(else_branch, other_statements, environment) {
-  case else_branch {
-    Some(statement) -> {
-      execute([statement], environment)
-      |> then(fn(result) {
-        case result {
-          #([], new_environment) -> execute(other_statements, new_environment)
-          _ -> Error(NotImplementedError)
-        }
-      })
-    }
-    None -> execute(other_statements, environment)
-  }
 }
 
 fn block(block_statements, environment) {
@@ -127,10 +109,8 @@ fn block(block_statements, environment) {
   |> environment.create()
   |> execute(block_statements, _)
   |> then(fn(result) {
-    case result {
-      #([], Local(parent: new_parent, ..)) -> Ok(new_parent)
-      _ -> Error(NotImplementedError)
-    }
+    let assert #([], Local(parent: new_parent, ..)) = result
+    Ok(new_parent)
   })
 }
 
@@ -147,9 +127,29 @@ fn print_stmt(expression, statements, environment) {
   |> then(fn(result) {
     let #(value, new_environment) = result
 
-    value
-    |> string.inspect()
-    |> io.println()
+    case value {
+      LoxBool(bool) ->
+        case bool {
+          True -> io.println("true")
+          False -> io.println("false")
+        }
+      LoxFunction(to_string: fun_name, ..) -> io.println(fun_name)
+      LoxNil -> io.println("nil")
+      LoxNumber(number) ->
+        case number == float.floor(number) {
+          True ->
+            number
+            |> float.truncate()
+            |> string.inspect
+            |> io.println
+          False ->
+            number
+            |> string.inspect
+            |> io.println
+        }
+      LoxString(text) -> io.println(text)
+    }
+
     do_execute(statements, new_environment)
   })
 }
@@ -158,8 +158,7 @@ fn variable_declaration(name_token, initializer, statements, environment) {
   evaluate(initializer, environment)
   |> then(fn(result) {
     let #(value, environment1) = result
-    let environment2 =
-      environment.define(environment1, name_token.lexeme, value)
+    let environment2 = environment.define(environment1, name_token.value, value)
     do_execute(statements, environment2)
   })
 }
@@ -183,7 +182,7 @@ fn do_while_stmt(condition, body, other_statements, environment) {
   })
 }
 
-fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
+fn evaluate(expression, environment) -> LoxResult(#(LoxValue, Environment)) {
   case expression {
     Assign(name: name_token, value: expr) ->
       evaluate_assignment(name_token, expr, environment)
@@ -195,9 +194,8 @@ fn evaluate(expression, environment) -> LoxResult(#(Dynamic, Environment)) {
     Logical(operator, left, right, ..) ->
       evaluate_logical(operator, left, right, environment)
     Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
-    Variable(name_token) -> environment.get(environment, name_token.lexeme)
-    _ ->
-      Error(RuntimeError(message: "unexpected expression found.", values: []))
+    Variable(name_token) -> environment.get(environment, name_token.value)
+    _ -> Error(RuntimeError(message: "unexpected expression found."))
   }
 }
 
@@ -205,15 +203,15 @@ fn evaluate_assignment(
   name_token,
   expression,
   environment,
-) -> LoxResult(#(Dynamic, Environment)) {
+) -> LoxResult(#(LoxValue, Environment)) {
   evaluate(expression, environment)
   |> then(fn(result) { do_assignment(name_token, result) })
 }
 
 fn do_assignment(name_token, result) {
   let #(value, environment) = result
-  environment.assign(environment, name_token, dynamic.from(value))
-  |> then(fn(new_environment) { Ok(#(dynamic.from(value), new_environment)) })
+  environment.assign(environment, name_token, value)
+  |> then(fn(new_environment) { Ok(#(value, new_environment)) })
 }
 
 fn evaluate_binary(
@@ -221,119 +219,113 @@ fn evaluate_binary(
   left_expr,
   right_expr,
   environment,
-) -> LoxResult(#(Dynamic, Environment)) {
+) -> LoxResult(#(LoxValue, Environment)) {
   let assert Ok(#(left_value, environment1)) = evaluate(left_expr, environment)
   let assert Ok(#(right_value, environment2)) =
     evaluate(right_expr, environment1)
-  // Some binary operators take only certain types.
-  let numbers = unpack_values(dynamic.float, left_value, right_value)
-  let strings = unpack_values(dynamic.string, left_value, right_value)
+  let numbers = case left_value, right_value {
+    LoxNumber(left), LoxNumber(right) -> Some(#(left, right))
+    _, _ -> None
+  }
+  let strings = case left_value, right_value {
+    LoxString(left), LoxString(right) -> Some(#(left, right))
+    _, _ -> None
+  }
   // Evaluate the binary operators.
   case operator {
-    BangEqual ->
-      Ok(#(dynamic.from(!{ left_value == right_value }), environment2))
-    EqualEqual ->
-      Ok(#(dynamic.from({ left_value == right_value }), environment2))
+    BangEqual -> Ok(#(LoxBool(!{ left_value == right_value }), environment2))
+    EqualEqual -> Ok(#(LoxBool({ left_value == right_value }), environment2))
     Greater -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number >. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxBool(left_number >. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     GreaterEqual -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number >=. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxBool(left_number >=. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     Less -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number <. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxBool(left_number <. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     LessEqual -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number <=. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxBool(left_number <=. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     Minus -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number -. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxNumber(left_number -. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     Plus -> {
       case numbers, strings {
-        Some([left_number, right_number]), None ->
-          Ok(#(dynamic.from(left_number +. right_number), environment2))
-        None, Some([left_string, right_string]) ->
-          Ok(#(dynamic.from(left_string <> right_string), environment2))
+        Some(#(left_number, right_number)), None ->
+          Ok(#(LoxNumber(left_number +. right_number), environment2))
+        None, Some(#(left_string, right_string)) ->
+          Ok(#(LoxString(left_string <> right_string), environment2))
         _, _ ->
           Error(RuntimeError(
             message: "binary operator Plus takes either two numbers or two strings.",
-            values: [left_value, right_value],
           ))
       }
     }
 
     Slash -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number /. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxNumber(left_number /. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     Star -> {
       case numbers {
-        Some([left_number, right_number]) ->
-          Ok(#(dynamic.from(left_number *. right_number), environment2))
+        Some(#(left_number, right_number)) ->
+          Ok(#(LoxNumber(left_number *. right_number), environment2))
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
-            values: [left_value, right_value],
           ))
       }
     }
     _ ->
       Error(RuntimeError(
         message: "unrecognized token " <> string.inspect(operator) <> " in binary expression.",
-        values: [left_value, right_value],
       ))
   }
 }
 
-fn evaluate_call(call_expr, environment) -> LoxResult(#(Dynamic, Environment)) {
+fn evaluate_call(call_expr, environment) -> LoxResult(#(LoxValue, Environment)) {
   let assert Call(callee, _paren, arguments) = call_expr
   evaluate(callee, environment)
   |> then(fn(result) {
@@ -357,9 +349,7 @@ fn evaluate_arguments(accumulator, argument) {
 
 fn call_function(result) {
   let #(callee_value, argument_values, environment2) = result
-  // Check that `callee_value` is callable
-  let decoded_callee = dynamic.unsafe_coerce(callee_value)
-  case decoded_callee {
+  case callee_value {
     LoxFunction(arity: arity, declaration: declaration, ..) -> {
       let assert FunDecl(params: params, body: body, ..) = declaration
       let args_length = list.length(argument_values)
@@ -370,19 +360,14 @@ fn call_function(result) {
             message: "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
               args_length,
             ),
-            values: [],
           ))
       }
     }
-    _ ->
-      Error(RuntimeError(
-        message: "Can only call functions and classes.",
-        values: [],
-      ))
+    _ -> Error(RuntimeError(message: "Can only call functions and classes."))
   }
 }
 
-fn do_call_function(params: List(token.Token), arguments, body, environment) {
+fn do_call_function(params: List(types.Token), arguments, body, environment) {
   let fun_environment = environment.create(Some(environment))
   params
   |> list.zip(with: arguments)
@@ -391,26 +376,25 @@ fn do_call_function(params: List(token.Token), arguments, body, environment) {
     with: fn(current_env, param_arg_pair) {
       environment.define(
         current_env,
-        pair.first(param_arg_pair).lexeme,
+        pair.first(param_arg_pair).value,
         pair.second(param_arg_pair),
       )
     },
   )
   |> block(body, _)
 
-  Ok(#(dynamic.from(Nil), environment))
+  Ok(#(LoxNil, environment))
 }
 
 fn evaluate_logical(operator, left_expr, right_expr, environment) {
   let assert Ok(#(left_value, environment1)) = evaluate(left_expr, environment)
   case operator, is_truthy(left_value) {
-    Or, True | And, False -> Ok(#(dynamic.from(left_value), environment1))
+    Or, True | And, False -> Ok(#(left_value, environment1))
     And, True | Or, False -> {
       let assert Ok(#(right_value, environment2)) =
         evaluate(right_expr, environment1)
-      Ok(#(dynamic.from(right_value), environment2))
+      Ok(#(right_value, environment2))
     }
-    _, _ -> Error(NotImplementedError)
   }
 }
 
@@ -418,35 +402,28 @@ fn evaluate_unary(
   operator: TokenType,
   right_expr,
   environment,
-) -> LoxResult(#(Dynamic, Environment)) {
+) -> LoxResult(#(LoxValue, Environment)) {
   let assert Ok(#(value, new_environment)) = evaluate(right_expr, environment)
   case operator {
-    Bang -> Ok(#(dynamic.from(!is_truthy(value)), new_environment))
+    Bang -> Ok(#(LoxBool(!is_truthy(value)), new_environment))
     Minus -> {
-      let assert Ok(number) = dynamic.float(value)
-      Ok(#(dynamic.from(0.0 -. number), new_environment))
+      case value {
+        LoxNumber(number) -> Ok(#(LoxNumber(0.0 -. number), new_environment))
+        _ ->
+          Error(RuntimeError(
+            "Unexpected argument to unary '-'. Expected a number, got " <> string.inspect(
+              value,
+            ) <> ".",
+          ))
+      }
     }
     _ ->
-      Error(RuntimeError(
-        message: "unexpected operator in unary expression.",
-        values: [value],
-      ))
+      Error(RuntimeError(message: "unexpected operator in unary expression."))
   }
 }
 
-fn unpack_values(function, left_value, right_value) {
-  option.all(list.map(
-    [left_value, right_value],
-    fn(value) {
-      value
-      |> function
-      |> option.from_result
-    },
-  ))
-}
-
-fn is_truthy(value) -> Bool {
-  let is_nil = value == dynamic.from(Nil)
-  let is_false = value == dynamic.from(False)
+fn is_truthy(value: LoxValue) -> Bool {
+  let is_nil = value == LoxNil
+  let is_false = value == LoxBool(False)
   !is_nil && !is_false
 }

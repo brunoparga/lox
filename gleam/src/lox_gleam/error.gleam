@@ -1,13 +1,10 @@
-//// Define all the possible error types in the application and a function
-//// to print them.
-
-import gleam/dynamic
+//// Define all the possible error types in the application.
 
 pub type LoxError {
   ErlangError(message: String)
   NotImplementedError
   ParseError(message: String)
-  RuntimeError(message: String, values: List(dynamic.Dynamic))
+  RuntimeError(message: String)
   ScanError(message: String, line: Int)
   ScanInvalidNumberError
   ScanUnexpectedEOFError

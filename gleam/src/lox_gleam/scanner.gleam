@@ -2,20 +2,18 @@
 //// code (whether from a file or typed into the REPL) and returns,
 //// hopefully, a list of tokens for that program.
 
-import gleam/dynamic
 import gleam/float
 import gleam/list
 import gleam/regex
 import gleam/string
 import lox_gleam/error
 import lox_gleam/error_handler
-import lox_gleam/token.{Token}
-import lox_gleam/token_type.{
-  And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
-  Fun, Greater, GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less,
-  LessEqual, LoxFalse, LoxNil, LoxString, LoxTrue, Minus, Number, Or, Plus,
-  Print, Return, RightBrace, RightParen, Semicolon, Slash, Star, Super, This,
-  Var, While,
+import lox_gleam/types.{
+  And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual,
+  FalseToken, For, Fun, Greater, GreaterEqual, Identifier, If, LeftBrace,
+  LeftParen, Less, LessEqual, LoxNil, LoxNumber, LoxString, Minus, NilToken,
+  NumberToken, Or, Plus, Print, Return, RightBrace, RightParen, Semicolon, Slash,
+  Star, StringToken, Super, This, Token, TrueToken, Var, While,
 }
 
 pub fn scan(source) {
@@ -37,8 +35,7 @@ fn do_scan(source, tokens, line) {
 }
 
 fn end_scan(tokens, line) {
-  let token =
-    Token(token_type: Eof, lexeme: "", literal: dynamic.from(Nil), line: line)
+  let token = Token(token_type: Eof, value: LoxNil, line: line)
   Ok([token, ..tokens])
 }
 
@@ -73,12 +70,7 @@ fn scan_tokens(source, tokens, line) {
 
 fn add_simple_token(source, tokens, line, text) {
   let token =
-    Token(
-      token_type: text_to_token_type(text),
-      lexeme: text,
-      literal: dynamic.from(Nil),
-      line: line,
-    )
+    Token(token_type: text_to_token_type(text), value: LoxNil, line: line)
   do_scan(source, [token, ..tokens], line)
 }
 
@@ -106,17 +98,17 @@ fn text_to_token_type(text) {
     "and" -> And
     "class" -> Class
     "else" -> Else
-    "false" -> LoxFalse
+    "false" -> FalseToken
     "for" -> For
     "fun" -> Fun
     "if" -> If
-    "nil" -> LoxNil
+    "nil" -> NilToken
     "or" -> Or
     "print" -> Print
     "return" -> Return
     "super" -> Super
     "this" -> This
-    "true" -> LoxTrue
+    "true" -> TrueToken
     "var" -> Var
     "while" -> While
     _ -> Identifier
@@ -166,7 +158,8 @@ fn do_add_string(source, tokens, line, text) {
     True -> count_newlines(text)
     False -> 0
   }
-  add_string_token(source, text, tokens, line + newlines)
+  let token = Token(token_type: StringToken, value: LoxString(text), line: line)
+  do_scan(source, [token, ..tokens], line + newlines)
 }
 
 fn count_newlines(text) {
@@ -174,17 +167,6 @@ fn count_newlines(text) {
   |> string.to_graphemes()
   |> list.filter(fn(char) { char == "\n" })
   |> list.length()
-}
-
-fn add_string_token(source, literal, tokens, line) {
-  let token =
-    Token(
-      token_type: LoxString,
-      lexeme: literal,
-      literal: dynamic.from(literal),
-      line: line,
-    )
-  do_scan(source, [token, ..tokens], line)
 }
 
 fn is_digit(char) {
@@ -203,12 +185,7 @@ fn add_number(source, tokens, line) {
     Ok(#(text, new_source)) -> {
       let assert Ok(value) = float.parse(text)
       let token =
-        Token(
-          token_type: Number,
-          lexeme: text,
-          literal: dynamic.from(value),
-          line: line,
-        )
+        Token(token_type: NumberToken, value: LoxNumber(value), line: line)
       do_scan(new_source, [token, ..tokens], line)
     }
     Error(error.ScanInvalidNumberError) ->
@@ -272,13 +249,12 @@ fn add_text_based(source, tokens, line) {
   let result = identifier_text("", source)
   case result {
     Ok(#(text, new_source)) -> {
-      let token =
-        Token(
-          token_type: text_to_token_type(text),
-          lexeme: text,
-          literal: dynamic.from(Nil),
-          line: line,
-        )
+      let token_type = text_to_token_type(text)
+      let value = case token_type {
+        Identifier -> LoxString(text)
+        _ -> LoxNil
+      }
+      let token = Token(token_type: token_type, value: value, line: line)
       do_scan(new_source, [token, ..tokens], line)
     }
     Error(_reason) ->

@@ -1,23 +1,20 @@
 //// Expose `parse`, a function that takes in a list of Lox tokens and
 //// returns an abstract syntax tree.
 
-import gleam/dynamic
 import gleam/list
 import gleam/option
 import gleam/result.{then}
 import gleam/string
-import lox_gleam/ast_types.{
-  Assign, Binary, Block, Call, Expr, ExprStmt, FunDecl, Grouping, IfStmt,
-  Literal, Logical, PrintStmt, Stmt, Unary, VarDecl, Variable, WhileStmt,
-}
-import lox_gleam/error.{LoxResult, NotImplementedError, ParseError}
+import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
-import lox_gleam/token.{Token}
-import lox_gleam/token_type.{
-  And, Bang, BangEqual, Comma, Else, Eof, Equal, EqualEqual, For, Fun, Greater,
-  GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less, LessEqual, LoxFalse,
-  LoxNil, LoxString, LoxTrue, Minus, Number, Or, Plus, Print, RightBrace,
-  RightParen, Semicolon, Slash, Star, TokenType, Var, While,
+import lox_gleam/types.{
+  And, Assign, Bang, BangEqual, Binary, Block, Call, Comma, Else, Eof, Equal,
+  EqualEqual, Expr, ExprStmt, FalseToken, For, Fun, FunDecl, Greater,
+  GreaterEqual, Grouping, Identifier, If, IfStmt, LeftBrace, LeftParen, Less,
+  LessEqual, Literal, Logical, LoxBool, LoxNil, LoxString, Minus, NilToken,
+  NumberToken, Or, Plus, Print, PrintStmt, RightBrace, RightParen, Semicolon,
+  Slash, Star, Stmt, StringToken, Token, TokenType, TrueToken, Unary, Var,
+  VarDecl, Variable, While, WhileStmt,
 }
 
 type ExprAndTokens =
@@ -176,8 +173,7 @@ fn for_statement(statements, tokens: List(Token)) {
       }
 
       let while_condition = case condition_expr {
-        option.None ->
-          Literal(value: dynamic.from(True), line: third_token.line)
+        option.None -> Literal(value: LoxBool(True), line: third_token.line)
         option.Some(expr) -> expr
       }
 
@@ -189,7 +185,7 @@ fn for_statement(statements, tokens: List(Token)) {
       }
       declaration(Ok(#([final_while, ..statements3], tokens8)))
     }
-    _ -> Error(NotImplementedError)
+    _ -> Error(ParseError(message: "expect '(' after 'for'."))
   }
 }
 
@@ -232,7 +228,7 @@ fn do_if_statement(condition, statements, tokens) {
       }
       #(_, [not_else, ..]) ->
         Error(ParseError(
-          message: "Error at '" <> not_else.lexeme <> "': Expect expression.",
+          message: "Error at '" <> string.inspect(not_else.value) <> "': Expect expression.",
         ))
     }
   })
@@ -276,7 +272,7 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
     Equal ->
       var_declaration_with_assignment(variable_name, statements, new_tokens)
     Semicolon -> {
-      let nil_expr = Literal(dynamic.from(Nil), variable_name.line)
+      let nil_expr = Literal(LoxNil, variable_name.line)
       let var_declaration = VarDecl(name: variable_name, initializer: nil_expr)
       Ok(#([var_declaration, ..statements], new_tokens))
     }
@@ -341,7 +337,8 @@ fn do_while_statement(condition, statements, tokens) {
 fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let assert Ok(first_token) = list.first(tokens)
   case first_token.token_type {
-    Eof -> Error(error.NotImplementedError)
+    Eof ->
+      Error(ParseError(message: "unexpected end of file while parsing block."))
     _ -> {
       declaration(Ok(#([], tokens)))
       |> then(fn(result) {
@@ -515,36 +512,20 @@ fn build_arguments(
 fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
-    LoxFalse ->
+    FalseToken ->
+      Ok(#(Literal(value: LoxBool(False), line: first_token.line), other_tokens))
+    TrueToken ->
+      Ok(#(Literal(value: LoxBool(True), line: first_token.line), other_tokens))
+    NilToken ->
+      Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
+    StringToken | NumberToken ->
       Ok(#(
-        Literal(value: dynamic.from(False), line: first_token.line),
-        other_tokens,
-      ))
-    LoxTrue ->
-      Ok(#(
-        Literal(value: dynamic.from(True), line: first_token.line),
-        other_tokens,
-      ))
-    LoxNil ->
-      Ok(#(
-        Literal(value: dynamic.from(Nil), line: first_token.line),
-        other_tokens,
-      ))
-    LoxString | Number ->
-      Ok(#(
-        Literal(
-          value: dynamic.from(first_token.literal),
-          line: first_token.line,
-        ),
+        Literal(value: first_token.value, line: first_token.line),
         other_tokens,
       ))
     Identifier -> Ok(#(Variable(name: first_token), other_tokens))
     LeftParen -> do_grouping(first_token, other_tokens)
-    Eof ->
-      Ok(#(
-        Literal(value: dynamic.from(Nil), line: first_token.line),
-        other_tokens,
-      ))
+    Eof -> Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
     _ -> Error(ParseError(message: "unexpected token."))
   }
 }
@@ -554,13 +535,13 @@ fn do_grouping(first_token: Token, other_tokens) {
   |> expression
   |> then(fn(result) {
     case result {
-      #(inner_expr, [Token(lexeme: ")", ..), ..tokens2]) -> {
+      #(inner_expr, [Token(value: LoxString(")"), ..), ..tokens2]) -> {
         let expr = Grouping(expression: inner_expr, line: first_token.line)
         Ok(#(expr, tokens2))
       }
-      #(_inner_expr, [Token(lexeme: not_right_paren, ..), ..]) -> {
+      #(_inner_expr, [Token(value: not_right_paren, ..), ..]) -> {
         Error(ParseError(
-          message: "unmatched '(', got " <> not_right_paren <> " instead.",
+          message: "unmatched '(', got " <> string.inspect(not_right_paren) <> " instead.",
         ))
       }
     }
