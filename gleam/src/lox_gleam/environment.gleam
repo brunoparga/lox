@@ -41,6 +41,24 @@ pub fn define(
   }
 }
 
+pub fn define_at_global(
+  environment: Environment,
+  name: LoxValue,
+  value: LoxValue,
+) -> Environment {
+  case environment {
+    Global(..) -> define(environment, name, value)
+    Local(parent: Local(..) as parent, table: table) -> {
+      let new_parent = define_at_global(parent, name, value)
+      Local(parent: new_parent, table: table)
+    }
+    Local(parent: Global(..) as parent, table: table) -> {
+      let new_parent = define(parent, name, value)
+      Local(parent: new_parent, table: table)
+    }
+  }
+}
+
 pub fn assign(
   environment: Environment,
   name_token: types.Token,

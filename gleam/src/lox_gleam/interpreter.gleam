@@ -13,8 +13,8 @@ import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, EqualEqual, ExprStmt,
   FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual, Literal,
   Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString, LoxValue, Minus,
-  NativeFunction, Or, Plus, PrintStmt, Slash, Star, Stmt, TokenType, Unary,
-  VarDecl, Variable, WhileStmt,
+  NativeFunction, Or, Plus, PrintStmt, ReturnStmt, ReturnValue, Slash, Star,
+  Stmt, TokenType, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, RuntimeError}
@@ -59,6 +59,8 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
         IfStmt(..) -> if_stmt(statement, other_statements, environment)
         PrintStmt(expression: expression) ->
           print_stmt(expression, other_statements, environment)
+        ReturnStmt(value: return_expr, ..) ->
+          return_stmt(return_expr, environment)
         VarDecl(name, initializer) ->
           variable_declaration(name, initializer, other_statements, environment)
         WhileStmt(condition, body) ->
@@ -66,6 +68,17 @@ fn do_execute(statements, environment) -> LoxResult(#(List(Stmt), Environment)) 
       }
     }
   }
+}
+
+fn block(block_statements, environment) {
+  environment
+  |> Some()
+  |> environment.create()
+  |> execute(block_statements, _)
+  |> then(fn(result) {
+    let assert #([], Local(parent: new_parent, ..)) = result
+    Ok(new_parent)
+  })
 }
 
 fn fun_declaration(fun_decl, other_statements, environment) {
@@ -85,36 +98,31 @@ fn if_stmt(
   other_statements,
   environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  let assert IfStmt(condition, then_branch, else_branch) = if_statement
-  evaluate(condition, environment)
-  |> then(fn(result) {
-    let #(value, new_environment) = result
-    case is_truthy(value), else_branch {
-      True, _ -> do_branch(then_branch, other_statements, new_environment)
-      False, Some(else_branch) ->
-        do_branch(else_branch, other_statements, new_environment)
-      False, None -> execute(other_statements, environment)
+  case environment.get(environment, ReturnValue) {
+    Ok(#(_value, environment)) -> execute(other_statements, environment)
+    Error(_) -> {
+      let assert IfStmt(condition, then_branch, else_branch) = if_statement
+      evaluate(condition, environment)
+      |> then(fn(result) {
+        let #(value, new_environment) = result
+        case is_truthy(value), else_branch {
+          True, _ ->
+            execute_branch(then_branch, other_statements, new_environment)
+          False, Some(else_branch) ->
+            execute_branch(else_branch, other_statements, new_environment)
+          False, None -> execute(other_statements, environment)
+        }
+      })
     }
-  })
+  }
 }
 
-fn do_branch(statement, other_statements, environment) {
+fn execute_branch(statement, other_statements, environment) {
   [statement]
   |> execute(environment)
   |> then(fn(result) {
     let assert #([], new_environment) = result
     execute(other_statements, new_environment)
-  })
-}
-
-fn block(block_statements, environment) {
-  environment
-  |> Some()
-  |> environment.create()
-  |> execute(block_statements, _)
-  |> then(fn(result) {
-    let assert #([], Local(parent: new_parent, ..)) = result
-    Ok(new_parent)
   })
 }
 
@@ -153,10 +161,21 @@ fn print_stmt(expression, statements, environment) {
         }
       LoxString(text) -> io.println(text)
       NativeFunction(to_string: to_string, ..) -> io.println(to_string)
+      ReturnValue -> io.println("")
     }
 
     do_execute(statements, new_environment)
   })
+}
+
+fn return_stmt(return_expr, environment) {
+  let #(return_value, env1) = case evaluate(return_expr, environment) {
+    Ok(result) -> result
+    Error(_) -> #(LoxNil, environment)
+  }
+  let new_environment =
+    environment.define_at_global(env1, ReturnValue, return_value)
+  Ok(#([], new_environment))
 }
 
 fn variable_declaration(name_token, initializer, statements, environment) {
@@ -180,11 +199,16 @@ fn while_stmt(condition, body, other_statements, environment) {
 }
 
 fn do_while_stmt(condition, body, other_statements, environment) {
-  execute([body], environment)
-  |> then(fn(result) {
-    let #(_stmt, new_environment) = result
-    while_stmt(condition, body, other_statements, new_environment)
-  })
+  case environment.get(environment, ReturnValue) {
+    Ok(#(_value, environment)) -> execute(other_statements, environment)
+    Error(_) -> {
+      execute([body], environment)
+      |> then(fn(result) {
+        let #(_stmt, new_environment) = result
+        while_stmt(condition, body, other_statements, new_environment)
+      })
+    }
+  }
 }
 
 fn evaluate(expression, environment) -> LoxResult(#(LoxValue, Environment)) {
@@ -353,7 +377,7 @@ fn evaluate_arguments(accumulator, argument) {
 }
 
 fn call_function(result) {
-  let #(callee_value, argument_values, environment2) = result
+  let #(callee_value, argument_values, environment) = result
   let args_length = list.length(argument_values)
   let message = fn(arity) {
     "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
@@ -368,7 +392,7 @@ fn call_function(result) {
           seconds
           |> string.inspect
           |> io.println
-          Ok(#(LoxNumber(seconds), environment2))
+          Ok(#(LoxNumber(seconds), environment))
         }
         False -> Error(RuntimeError(message: message(arity)))
       }
@@ -376,7 +400,7 @@ fn call_function(result) {
     LoxFunction(arity: arity, declaration: declaration, ..) -> {
       let assert FunDecl(params: params, body: body, ..) = declaration
       case args_length == arity {
-        True -> do_call_function(params, argument_values, body, environment2)
+        True -> do_call_function(params, argument_values, body, environment)
         False -> Error(RuntimeError(message: message(arity)))
       }
     }
@@ -386,21 +410,26 @@ fn call_function(result) {
 
 fn do_call_function(params: List(types.Token), arguments, body, environment) {
   let fun_environment = environment.create(Some(environment))
-  params
-  |> list.zip(with: arguments)
-  |> list.fold(
-    from: fun_environment,
-    with: fn(current_env, param_arg_pair) {
-      environment.define(
-        current_env,
-        pair.first(param_arg_pair).value,
-        pair.second(param_arg_pair),
-      )
-    },
-  )
-  |> block(body, _)
+  let assert Ok(block_environment) =
+    params
+    |> list.zip(with: arguments)
+    |> list.fold(
+      from: fun_environment,
+      with: fn(current_env, param_arg_pair) {
+        environment.define(
+          current_env,
+          pair.first(param_arg_pair).value,
+          pair.second(param_arg_pair),
+        )
+      },
+    )
+    |> block(body, _)
 
-  Ok(#(LoxNil, environment))
+  let return_value = case environment.get(block_environment, ReturnValue) {
+    Ok(#(value, _env)) -> value
+    Error(_) -> LoxNil
+  }
+  Ok(#(return_value, environment))
 }
 
 fn evaluate_logical(operator, left_expr, right_expr, environment) {

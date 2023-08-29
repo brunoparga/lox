@@ -12,9 +12,9 @@ import lox_gleam/types.{
   EqualEqual, Expr, ExprStmt, FalseToken, For, Fun, FunDecl, Greater,
   GreaterEqual, Grouping, Identifier, If, IfStmt, LeftBrace, LeftParen, Less,
   LessEqual, Literal, Logical, LoxBool, LoxNil, LoxString, Minus, NilToken,
-  NumberToken, Or, Plus, Print, PrintStmt, RightBrace, RightParen, Semicolon,
-  Slash, Star, Stmt, StringToken, Token, TokenType, TrueToken, Unary, Var,
-  VarDecl, Variable, While, WhileStmt,
+  NumberToken, Or, Plus, Print, PrintStmt, Return, ReturnStmt, RightBrace,
+  RightParen, Semicolon, Slash, Star, Stmt, StringToken, Token, TokenType,
+  TrueToken, Unary, Var, VarDecl, Variable, While, WhileStmt,
 }
 
 type ExprAndTokens =
@@ -64,50 +64,10 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
     Print -> do_statement(statements, other_tokens, PrintStmt)
+    Return -> return_statement(first_token, statements, other_tokens)
     Var -> declaration(var_declaration(statements, other_tokens))
     While -> while_statement(statements, other_tokens)
     _ -> do_statement(statements, tokens, ExprStmt)
-  }
-}
-
-fn function_declaration(kind, statements, tokens: List(Token)) {
-  let [name_token, left_paren, next_token, ..tokens1] = tokens
-  case name_token.token_type, left_paren.token_type, next_token.token_type {
-    // No parameters
-    Identifier, LeftParen, RightParen -> Ok(#([], tokens1))
-    // Yes parameters
-    Identifier, LeftParen, _ -> build_params([], [next_token, ..tokens1])
-    Identifier, _, _ ->
-      Error(ParseError("Expect '(' after " <> kind <> " name."))
-    _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
-  }
-  |> then(fn(result) {
-    let #(parameters, tokens2) = result
-    case list.length(parameters) >= 255 {
-      True -> Error(ParseError("Can't have more than 255 parameters."))
-      False ->
-        block(statements, tokens2)
-        |> then(fn(result1) {
-          let assert #([Block(statements: body), ..statements], tokens3) =
-            result1
-          let fun_declaration =
-            FunDecl(name: name_token, params: parameters, body: body)
-          Ok(#([fun_declaration, ..statements], tokens3))
-        })
-    }
-  })
-}
-
-fn build_params(
-  params,
-  tokens: List(Token),
-) -> LoxResult(#(List(Token), List(Token))) {
-  let [param, comma_or_paren, ..new_tokens] = tokens
-  case param.token_type, comma_or_paren.token_type {
-    Identifier, RightParen -> Ok(#([param, ..params], new_tokens))
-    Identifier, Comma -> build_params([param, ..params], new_tokens)
-    Identifier, _ -> Error(ParseError("Expect ')' after parameters."))
-    _, _ -> Error(ParseError("Expect parameter name."))
   }
 }
 
@@ -189,6 +149,47 @@ fn for_statement(statements, tokens: List(Token)) {
   }
 }
 
+fn function_declaration(kind, statements, tokens: List(Token)) {
+  let [name_token, left_paren, next_token, ..tokens1] = tokens
+  case name_token.token_type, left_paren.token_type, next_token.token_type {
+    // No parameters
+    Identifier, LeftParen, RightParen -> Ok(#([], tokens1))
+    // Yes parameters
+    Identifier, LeftParen, _ -> build_params([], [next_token, ..tokens1])
+    Identifier, _, _ ->
+      Error(ParseError("Expect '(' after " <> kind <> " name."))
+    _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
+  }
+  |> then(fn(result) {
+    let #(parameters, tokens2) = result
+    case list.length(parameters) >= 255 {
+      True -> Error(ParseError("Can't have more than 255 parameters."))
+      False ->
+        block(statements, tokens2)
+        |> then(fn(result1) {
+          let assert #([Block(statements: body), ..statements], tokens3) =
+            result1
+          let fun_declaration =
+            FunDecl(name: name_token, params: parameters, body: body)
+          Ok(#([fun_declaration, ..statements], tokens3))
+        })
+    }
+  })
+}
+
+fn build_params(
+  params,
+  tokens: List(Token),
+) -> LoxResult(#(List(Token), List(Token))) {
+  let [param, comma_or_paren, ..new_tokens] = tokens
+  case param.token_type, comma_or_paren.token_type {
+    Identifier, RightParen -> Ok(#([param, ..params], new_tokens))
+    Identifier, Comma -> build_params([param, ..params], new_tokens)
+    Identifier, _ -> Error(ParseError("Expect ')' after parameters."))
+    _, _ -> Error(ParseError("Expect parameter name."))
+  }
+}
+
 fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..new_tokens] = tokens
   case first_token.token_type {
@@ -210,6 +211,8 @@ fn if_condition_is_ok(statements, tokens) {
 }
 
 fn do_if_statement(condition, statements, tokens) {
+  // Currently doesn't work if the then branch is just one statement
+  // (like return) outside of a block. It should.
   statement(statements, tokens)
   |> then(fn(result) {
     case result {
@@ -256,6 +259,27 @@ fn if_without_else(condition, then_branch, statements, tokens) {
       else_branch: option.None,
     )
   declaration(Ok(#([if_stmt, ..statements], tokens)))
+}
+
+fn return_statement(return_token, statements, tokens: List(Token)) {
+  let [maybe_semicolon, ..new_tokens] = tokens
+  let #(return_stmt, other_tokens) = case maybe_semicolon.token_type {
+    Semicolon -> {
+      let nil_return_value = Literal(LoxNil, line: return_token.line)
+      let return_stmt =
+        ReturnStmt(keyword: return_token, value: nil_return_value)
+      #(return_stmt, new_tokens)
+    }
+    _ -> {
+      let assert Ok(#(
+        return_value,
+        [Token(token_type: Semicolon, ..), ..tokens1],
+      )) = expression(tokens)
+      let return_stmt = ReturnStmt(keyword: return_token, value: return_value)
+      #(return_stmt, tokens1)
+    }
+  }
+  declaration(Ok(#([return_stmt, ..statements], other_tokens)))
 }
 
 fn var_declaration(statements, tokens: List(Token)) {

@@ -6,6 +6,7 @@ pub type Stmt {
   FunDecl(name: Token, params: List(Token), body: List(Stmt))
   IfStmt(condition: Expr, then_branch: Stmt, else_branch: option.Option(Stmt))
   PrintStmt(expression: Expr)
+  ReturnStmt(keyword: Token, value: Expr)
   VarDecl(name: Token, initializer: Expr)
   WhileStmt(condition: Expr, body: Stmt)
 }
@@ -32,6 +33,7 @@ pub type LoxValue {
   LoxNumber(Float)
   LoxString(String)
   NativeFunction(arity: Int, name: String, to_string: String)
+  ReturnValue
 }
 
 pub type TokenType {
