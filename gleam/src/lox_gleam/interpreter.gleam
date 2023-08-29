@@ -2,6 +2,7 @@
 //// processes it accoding to the rules of the Lox language.
 
 import gleam/float
+import gleam/int
 import gleam/io
 import gleam/list
 import gleam/option.{None, Some}
@@ -12,12 +13,15 @@ import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, EqualEqual, ExprStmt,
   FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual, Literal,
   Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString, LoxValue, Minus,
-  Or, Plus, PrintStmt, Slash, Star, Stmt, TokenType, Unary, VarDecl, Variable,
-  WhileStmt,
+  NativeFunction, Or, Plus, PrintStmt, Slash, Star, Stmt, TokenType, Unary,
+  VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/error_handler
+
+@external(erlang, "os", "system_time")
+pub fn system_time() -> Int
 
 pub fn interpret(statements: List(Stmt), environment) -> Environment {
   case execute(statements, environment) {
@@ -148,6 +152,7 @@ fn print_stmt(expression, statements, environment) {
             |> io.println
         }
       LoxString(text) -> io.println(text)
+      NativeFunction(to_string: to_string, ..) -> io.println(to_string)
     }
 
     do_execute(statements, new_environment)
@@ -349,18 +354,30 @@ fn evaluate_arguments(accumulator, argument) {
 
 fn call_function(result) {
   let #(callee_value, argument_values, environment2) = result
+  let args_length = list.length(argument_values)
+  let message = fn(arity) {
+    "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
+      args_length,
+    )
+  }
   case callee_value {
+    NativeFunction(arity: arity, ..) -> {
+      case args_length == arity {
+        True -> {
+          let seconds = int.to_float(system_time()) /. 1_000_000_000.0
+          seconds
+          |> string.inspect
+          |> io.println
+          Ok(#(LoxNumber(seconds), environment2))
+        }
+        False -> Error(RuntimeError(message: message(arity)))
+      }
+    }
     LoxFunction(arity: arity, declaration: declaration, ..) -> {
       let assert FunDecl(params: params, body: body, ..) = declaration
-      let args_length = list.length(argument_values)
       case args_length == arity {
         True -> do_call_function(params, argument_values, body, environment2)
-        False ->
-          Error(RuntimeError(
-            message: "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
-              args_length,
-            ),
-          ))
+        False -> Error(RuntimeError(message: message(arity)))
       }
     }
     _ -> Error(RuntimeError(message: "Can only call functions and classes."))

@@ -7,7 +7,7 @@ import gleam/option
 import gleam/result
 import gleam/string
 import lox_gleam/error
-import lox_gleam/types.{LoxValue}
+import lox_gleam/types.{LoxString, LoxValue, NativeFunction}
 
 type Table =
   map.Map(LoxValue, LoxValue)
@@ -20,7 +20,9 @@ pub type Environment {
 pub fn create(parent: option.Option(Environment)) -> Environment {
   case parent {
     option.Some(parent_env) -> Local(parent: parent_env, table: map.new())
-    option.None -> Global(map.new())
+    option.None ->
+      Global(map.new())
+      |> add_native_function()
   }
 }
 
@@ -97,4 +99,10 @@ fn is_global(environment) -> #(Bool, Table) {
     Global(table) -> #(True, table)
     Local(table: table, ..) -> #(False, table)
   }
+}
+
+fn add_native_function(environment) -> Environment {
+  let clock_function =
+    NativeFunction(arity: 0, name: "clock", to_string: "<native fn>")
+  define(environment, LoxString("clock"), clock_function)
 }

@@ -31,6 +31,7 @@ pub type LoxValue {
   LoxNil
   LoxNumber(Float)
   LoxString(String)
+  NativeFunction(arity: Int, name: String, to_string: String)
 }
 
 pub type TokenType {
