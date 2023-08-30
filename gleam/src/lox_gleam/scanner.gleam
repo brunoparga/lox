@@ -9,11 +9,11 @@ import gleam/result
 import gleam/string
 import lox_gleam/error.{LoxResult, ScanError}
 import lox_gleam/types.{
-  And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual,
-  FalseToken, For, Fun, Greater, GreaterEqual, Identifier, If, LeftBrace,
-  LeftParen, Less, LessEqual, LoxNil, LoxNumber, LoxString, Minus, NilToken,
-  NumberToken, Or, Plus, Print, Return, RightBrace, RightParen, Semicolon, Slash,
-  Star, StringToken, Super, This, Token, TokenType, TrueToken, Var, While,
+  And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
+  Fun, Greater, GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less,
+  LessEqual, LoxNil, LoxNumber, LoxString, Minus, Or, Plus, Print, Return,
+  RightBrace, RightParen, Semicolon, Slash, Star, Super, This, Token, TokenFalse,
+  TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Var, While,
 }
 
 pub fn scan(source: String) -> LoxResult(List(Token)) {
@@ -107,11 +107,11 @@ fn text_to_token_type(text: String) -> TokenType {
     "and" -> And
     "class" -> Class
     "else" -> Else
-    "false" -> FalseToken
+    "false" -> TokenFalse
     "for" -> For
     "fun" -> Fun
     "if" -> If
-    "nil" -> NilToken
+    "nil" -> TokenNil
     "or" -> Or
     "print" -> Print
     "return" -> Return
@@ -206,7 +206,7 @@ fn do_add_string(
     True -> count_newlines(text)
     False -> 0
   }
-  let token = Token(token_type: StringToken, value: LoxString(text), line: line)
+  let token = Token(token_type: TokenString, value: LoxString(text), line: line)
   do_scan(source, [token, ..tokens], line + newlines)
 }
 
@@ -237,7 +237,7 @@ fn add_number(
     let #(text, new_source) = result
     let assert Ok(value) = float.parse(text)
     let token =
-      Token(token_type: NumberToken, value: LoxNumber(value), line: line)
+      Token(token_type: TokenNumber, value: LoxNumber(value), line: line)
     do_scan(new_source, [token, ..tokens], line)
   })
 }

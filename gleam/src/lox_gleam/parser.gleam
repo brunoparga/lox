@@ -8,12 +8,12 @@ import gleam/string
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Comma, Else, Eof, Equal,
-  EqualEqual, Expr, ExprStmt, FalseToken, For, Fun, FunDecl, Greater,
-  GreaterEqual, Grouping, Identifier, If, IfStmt, LeftBrace, LeftParen, Less,
-  LessEqual, Literal, Logical, LoxBool, LoxNil, LoxString, Minus, NilToken,
-  NumberToken, Or, Plus, Print, PrintStmt, Return, ReturnStmt, RightBrace,
-  RightParen, Semicolon, Slash, Star, Stmt, StringToken, Token, TokenType,
-  TrueToken, Unary, Var, VarDecl, Variable, While, WhileStmt,
+  EqualEqual, Expr, ExprStmt, For, Fun, FunDecl, Greater, GreaterEqual, Grouping,
+  Identifier, If, IfStmt, LeftBrace, LeftParen, Less, LessEqual, Literal,
+  Logical, LoxBool, LoxNil, LoxString, Minus, Or, Plus, Print, PrintStmt, Return,
+  ReturnStmt, RightBrace, RightParen, Semicolon, Slash, Star, Stmt, Token,
+  TokenFalse, TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Unary,
+  Var, VarDecl, Variable, While, WhileStmt,
 }
 
 type ExprAndTokens =
@@ -599,13 +599,13 @@ fn build_arguments(
 fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
-    FalseToken ->
+    TokenFalse ->
       Ok(#(Literal(value: LoxBool(False), line: first_token.line), other_tokens))
     TrueToken ->
       Ok(#(Literal(value: LoxBool(True), line: first_token.line), other_tokens))
-    NilToken ->
+    TokenNil ->
       Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
-    StringToken | NumberToken ->
+    TokenString | TokenNumber ->
       Ok(#(
         Literal(value: first_token.value, line: first_token.line),
         other_tokens,

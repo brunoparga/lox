@@ -78,18 +78,18 @@ pub type TokenType {
 
   // Literals
   Identifier
-  StringToken
-  NumberToken
+  TokenString
+  TokenNumber
 
   // Keywords
   And
   Class
   Else
-  FalseToken
+  TokenFalse
   For
   Fun
   If
-  NilToken
+  TokenNil
   Or
   Print
   Return
