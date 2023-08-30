@@ -7,7 +7,9 @@ import gleam/option
 import gleam/result
 import gleam/string
 import lox_gleam/error
-import lox_gleam/types.{Environment, Global, Local, LoxValue, NativeFunction, LoxString, Table, Token}
+import lox_gleam/types.{
+  Environment, Global, Local, LoxString, LoxValue, NativeFunction, Table, Token,
+}
 
 pub fn create(parent: option.Option(Environment)) -> Environment {
   case parent {
@@ -104,14 +106,14 @@ pub fn get(
   }
 }
 
-fn is_global(environment) -> #(Bool, Table) {
+fn is_global(environment: Environment) -> #(Bool, Table) {
   case environment {
     Global(table) -> #(True, table)
     Local(table: table, ..) -> #(False, table)
   }
 }
 
-fn add_native_function(environment) -> Environment {
+fn add_native_function(environment: Environment) -> Environment {
   let clock_function =
     NativeFunction(arity: 0, name: "clock", to_string: "<native fn>")
   define(environment, LoxString("clock"), clock_function)

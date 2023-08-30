@@ -28,22 +28,25 @@ pub fn parse(tokens: List(Token)) -> List(Stmt) {
     Ok(#(statements, [])) | Ok(#(statements, [Token(token_type: Eof, ..)])) ->
       list.reverse(statements)
     Ok(#(_statements, [Token(..)])) -> {
-      error_handler.handle_error(ParseError(
-        message: "unexpected end of tokens.",
-      ))
+      let _ =
+        error_handler.handle_error(ParseError(
+          message: "unexpected end of tokens.",
+        ))
       []
     }
     Ok(#(statements, new_tokens)) ->
       // This handles the weird case of top-level blocks.
       list.reverse(list.concat([list.reverse(parse(new_tokens)), statements]))
     Error(error) -> {
-      error_handler.handle_error(error)
+      let _ = error_handler.handle_error(error)
       []
     }
   }
 }
 
-fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
+fn declaration(
+  stmts_and_tokens: LoxResult(StmtsAndTokens),
+) -> LoxResult(StmtsAndTokens) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
     Ok(#(_statements, [_one_token])) ->
@@ -53,7 +56,10 @@ fn declaration(stmts_and_tokens: LoxResult(StmtsAndTokens)) {
   }
 }
 
-fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
+fn statement(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     Else -> Ok(#(statements, tokens))
@@ -71,7 +77,10 @@ fn statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   }
 }
 
-fn for_statement(statements, tokens: List(Token)) {
+fn for_statement(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let stmt_extractor = fn(result) {
     let #([stmt, ..new_statements], new_tokens) = result
     Ok(#(option.Some(stmt), new_statements, new_tokens))
@@ -149,7 +158,11 @@ fn for_statement(statements, tokens: List(Token)) {
   }
 }
 
-fn function_declaration(kind, statements, tokens: List(Token)) {
+fn function_declaration(
+  kind: String,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [name_token, left_paren, next_token, ..tokens1] = tokens
   case name_token.token_type, left_paren.token_type, next_token.token_type {
     // No parameters
@@ -178,7 +191,7 @@ fn function_declaration(kind, statements, tokens: List(Token)) {
 }
 
 fn build_params(
-  params,
+  params: List(Token),
   tokens: List(Token),
 ) -> LoxResult(#(List(Token), List(Token))) {
   let [param, comma_or_paren, ..new_tokens] = tokens
@@ -190,7 +203,10 @@ fn build_params(
   }
 }
 
-fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
+fn if_statement(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..new_tokens] = tokens
   case first_token.token_type {
     LeftParen -> if_condition_is_ok(statements, new_tokens)
@@ -198,7 +214,10 @@ fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
   }
 }
 
-fn if_condition_is_ok(statements, tokens) {
+fn if_condition_is_ok(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   tokens
   |> expression()
   |> then(fn(result) {
@@ -210,7 +229,11 @@ fn if_condition_is_ok(statements, tokens) {
   })
 }
 
-fn do_if_statement(condition, statements, tokens) {
+fn do_if_statement(
+  condition: Expr,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   // Currently doesn't work if the then branch is just one statement
   // (like return) outside of a block. It should.
   statement(statements, tokens)
@@ -237,7 +260,12 @@ fn do_if_statement(condition, statements, tokens) {
   })
 }
 
-fn if_then_else(condition, then_branch, statements, tokens) {
+fn if_then_else(
+  condition: Expr,
+  then_branch: Stmt,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   statement(statements, tokens)
   |> then(fn(result) {
     let #([else_branch, ..new_statements], new_tokens) = result
@@ -251,7 +279,12 @@ fn if_then_else(condition, then_branch, statements, tokens) {
   })
 }
 
-fn if_without_else(condition, then_branch, statements, tokens) {
+fn if_without_else(
+  condition: Expr,
+  then_branch: Stmt,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let if_stmt =
     IfStmt(
       condition: condition,
@@ -261,7 +294,11 @@ fn if_without_else(condition, then_branch, statements, tokens) {
   declaration(Ok(#([if_stmt, ..statements], tokens)))
 }
 
-fn return_statement(return_token, statements, tokens: List(Token)) {
+fn return_statement(
+  return_token: Token,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [maybe_semicolon, ..new_tokens] = tokens
   let #(return_stmt, other_tokens) = case maybe_semicolon.token_type {
     Semicolon -> {
@@ -282,7 +319,10 @@ fn return_statement(return_token, statements, tokens: List(Token)) {
   declaration(Ok(#([return_stmt, ..statements], other_tokens)))
 }
 
-fn var_declaration(statements, tokens: List(Token)) {
+fn var_declaration(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [variable_name, ..tokens1] = tokens
   case variable_name.token_type {
     Identifier -> do_var_declaration(variable_name, statements, tokens1)
@@ -290,7 +330,11 @@ fn var_declaration(statements, tokens: List(Token)) {
   }
 }
 
-fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
+fn do_var_declaration(
+  variable_name: Token,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [maybe_equal, ..new_tokens] = tokens
   case maybe_equal.token_type {
     Equal ->
@@ -307,7 +351,11 @@ fn do_var_declaration(variable_name: Token, statements, tokens: List(Token)) {
   }
 }
 
-fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
+fn var_declaration_with_assignment(
+  name: Token,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   expression(tokens)
   |> then(fn(result) {
     let #(expr, [semicolon, ..new_tokens]) = result
@@ -324,7 +372,10 @@ fn var_declaration_with_assignment(name, statements, tokens: List(Token)) {
   })
 }
 
-fn while_statement(statements, tokens) {
+fn while_statement(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let [first_token, ..new_tokens] = tokens
   case first_token.token_type {
     LeftParen -> while_condition_is_ok(statements, new_tokens)
@@ -332,7 +383,10 @@ fn while_statement(statements, tokens) {
   }
 }
 
-fn while_condition_is_ok(statements, tokens) {
+fn while_condition_is_ok(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   tokens
   |> expression()
   |> then(fn(result) {
@@ -344,7 +398,11 @@ fn while_condition_is_ok(statements, tokens) {
   })
 }
 
-fn do_while_statement(condition, statements, tokens) {
+fn do_while_statement(
+  condition: Expr,
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   statement(statements, tokens)
   |> then(fn(result) {
     case result {
@@ -358,7 +416,10 @@ fn do_while_statement(condition, statements, tokens) {
   })
 }
 
-fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
+fn block(
+  existing_statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
   let assert Ok(first_token) = list.first(tokens)
   case first_token.token_type {
     Eof ->
@@ -374,7 +435,7 @@ fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) 
   }
 }
 
-fn do_statement(statements, tokens, stmt_type) {
+fn do_statement(statements: List(Stmt), tokens: List(Token), stmt_type) {
   tokens
   |> expression()
   |> then(fn(result) {
@@ -384,11 +445,11 @@ fn do_statement(statements, tokens, stmt_type) {
   })
 }
 
-fn expression(tokens) -> LoxResult(ExprAndTokens) {
+fn expression(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   assignment(tokens)
 }
 
-fn assignment(tokens) -> LoxResult(ExprAndTokens) {
+fn assignment(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> or()
   |> then(fn(result) {
@@ -404,7 +465,10 @@ fn assignment(tokens) -> LoxResult(ExprAndTokens) {
   })
 }
 
-fn do_assignment(name_expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
+fn do_assignment(
+  name_expr: Expr,
+  tokens: List(Token),
+) -> LoxResult(ExprAndTokens) {
   let [equals, ..tokens1] = tokens
   case equals.token_type {
     Equal -> do_valid_assignment(name_expr, tokens1)
@@ -412,7 +476,7 @@ fn do_assignment(name_expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   }
 }
 
-fn do_valid_assignment(name_expr, tokens) {
+fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
   tokens
   |> assignment()
   |> then(fn(result) {
@@ -425,43 +489,43 @@ fn do_valid_assignment(name_expr, tokens) {
   })
 }
 
-fn or(tokens) {
+fn or(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> and()
   |> binary_inner([Or], and, Logical)
 }
 
-fn and(tokens) {
+fn and(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> equality()
   |> binary_inner([And], equality, Logical)
 }
 
-fn equality(tokens) -> LoxResult(ExprAndTokens) {
+fn equality(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> comparison()
   |> binary_inner([BangEqual, EqualEqual], comparison, Binary)
 }
 
-fn comparison(tokens) -> LoxResult(ExprAndTokens) {
+fn comparison(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> term()
   |> binary_inner([Greater, GreaterEqual, Less, LessEqual], term, Binary)
 }
 
-fn term(tokens) -> LoxResult(ExprAndTokens) {
+fn term(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> factor()
   |> binary_inner([Minus, Plus], factor, Binary)
 }
 
-fn factor(tokens) -> LoxResult(ExprAndTokens) {
+fn factor(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> unary()
   |> binary_inner([Slash, Star], unary, Binary)
 }
 
-fn unary(tokens) -> LoxResult(ExprAndTokens) {
+fn unary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [first_token, ..tokens1] = tokens
   case match(first_token, [Bang, Minus]) {
     True -> do_unary(first_token, tokens1)
@@ -469,7 +533,7 @@ fn unary(tokens) -> LoxResult(ExprAndTokens) {
   }
 }
 
-fn do_unary(first_token, tokens) {
+fn do_unary(first_token: Token, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> unary()
   |> then(fn(result) {
@@ -480,7 +544,7 @@ fn do_unary(first_token, tokens) {
   })
 }
 
-fn call(tokens: List(Token)) {
+fn call(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> primary()
   |> then(fn(result) {
@@ -492,7 +556,7 @@ fn call(tokens: List(Token)) {
   })
 }
 
-fn finish_call(callee, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
+fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   let [right_paren, ..other_tokens] = tokens
   case right_paren.token_type {
     RightParen -> Ok(#([], right_paren, other_tokens))
@@ -518,8 +582,8 @@ fn finish_call(callee, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 }
 
 fn build_arguments(
-  arguments,
-  tokens,
+  arguments: List(Expr),
+  tokens: List(Token),
 ) -> LoxResult(#(List(Expr), Token, List(Token))) {
   tokens
   |> expression()
@@ -554,7 +618,10 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   }
 }
 
-fn do_grouping(first_token: Token, other_tokens) {
+fn do_grouping(
+  first_token: Token,
+  other_tokens: List(Token),
+) -> LoxResult(ExprAndTokens) {
   other_tokens
   |> expression()
   |> then(fn(result) {
@@ -576,7 +643,13 @@ fn match(token: Token, types: List(TokenType)) -> Bool {
   list.any(types, fn(type_to_match) { token.token_type == type_to_match })
 }
 
-fn binary_inner(token_types, function, expr_type) {
+/// There was a time when I knew the reason for the existence of this
+/// mess of higher-order functions. Oh, ye good olde days.
+fn binary_inner(
+  token_types: List(TokenType),
+  function: fn(List(Token)) -> LoxResult(ExprAndTokens),
+  expr_type: fn(TokenType, Expr, Expr, Int) -> Expr,
+) -> fn(LoxResult(ExprAndTokens)) -> LoxResult(ExprAndTokens) {
   fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
     expr_and_tokens
     |> then(fn(result) {
@@ -586,7 +659,11 @@ fn binary_inner(token_types, function, expr_type) {
   }
 }
 
-fn happy_path(token_types, function, expr_type) {
+fn happy_path(
+  token_types: List(TokenType),
+  function: fn(List(Token)) -> LoxResult(ExprAndTokens),
+  expr_type: fn(TokenType, Expr, Expr, Int) -> Expr,
+) -> fn(Expr, List(Token)) -> LoxResult(ExprAndTokens) {
   fn(expr, tokens) {
     let [first_token, ..other_tokens] = tokens
     case match(first_token, token_types) {
@@ -604,14 +681,16 @@ fn happy_path(token_types, function, expr_type) {
   }
 }
 
+/// It's called recursive descent parsing, and the more recursion the
+/// more parser-y it is. I guess this thing has no pars-imony.
 fn build_binary(
-  token_types,
-  function,
-  left,
-  first_token,
-  other_tokens,
-  expr_type,
-) {
+  token_types: List(TokenType),
+  function: fn(List(Token)) -> LoxResult(ExprAndTokens),
+  left: Expr,
+  first_token: Token,
+  other_tokens: List(Token),
+  expr_type: fn(TokenType, Expr, Expr, Int) -> Expr,
+) -> LoxResult(ExprAndTokens) {
   other_tokens
   |> function()
   |> then(fn(result) {

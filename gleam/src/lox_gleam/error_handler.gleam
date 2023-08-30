@@ -1,10 +1,8 @@
 import gleam/int
 import gleam/io
-import gleam/option
-import lox_gleam/environment
 import lox_gleam/error
 
-pub fn handle_error(error_type) {
+pub fn handle_error(error_type: error.LoxError) -> error.LoxResult(a) {
   let message = case error_type {
     error.ErlangError(message) ->
       "Erlang error when opening file: " <> message <> "."
@@ -17,7 +15,6 @@ pub fn handle_error(error_type) {
     _ -> ""
   }
   io.println_error(message)
-  // This function is called in the same place as others which return maps.
-  // Therefore, this one does too. Taipchenk.
-  environment.create(option.None)
+
+  Error(error_type)
 }

@@ -6,27 +6,31 @@ import gleam/float
 import gleam/list
 import gleam/regex
 import gleam/string
-import lox_gleam/error
+import lox_gleam/error.{LoxResult}
 import lox_gleam/error_handler
 import lox_gleam/types.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual,
   FalseToken, For, Fun, Greater, GreaterEqual, Identifier, If, LeftBrace,
   LeftParen, Less, LessEqual, LoxNil, LoxNumber, LoxString, Minus, NilToken,
   NumberToken, Or, Plus, Print, Return, RightBrace, RightParen, Semicolon, Slash,
-  Star, StringToken, Super, This, Token, TrueToken, Var, While,
+  Star, StringToken, Super, This, Token, TokenType, TrueToken, Var, While,
 }
 
-pub fn scan(source) {
+pub fn scan(source: String) -> List(Token) {
   case do_scan(source, [], 1) {
     Ok(tokens) -> list.reverse(tokens)
     Error(error) -> {
-      error_handler.handle_error(error)
+      let _ = error_handler.handle_error(error)
       []
     }
   }
 }
 
-fn do_scan(source, tokens, line) {
+fn do_scan(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   case source == "" {
     // Add EOF if we're done
     True -> end_scan(tokens, line)
@@ -34,12 +38,16 @@ fn do_scan(source, tokens, line) {
   }
 }
 
-fn end_scan(tokens, line) {
+fn end_scan(tokens: List(Token), line: Int) -> LoxResult(List(Token)) {
   let token = Token(token_type: Eof, value: LoxNil, line: line)
   Ok([token, ..tokens])
 }
 
-fn scan_tokens(source, tokens, line) {
+fn scan_tokens(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char {
     // Easy one-character tokens
@@ -68,13 +76,18 @@ fn scan_tokens(source, tokens, line) {
   }
 }
 
-fn add_simple_token(source, tokens, line, text) {
+fn add_simple_token(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+  text: String,
+) -> LoxResult(List(Token)) {
   let token =
     Token(token_type: text_to_token_type(text), value: LoxNil, line: line)
   do_scan(source, [token, ..tokens], line)
 }
 
-fn text_to_token_type(text) {
+fn text_to_token_type(text: String) -> TokenType {
   case text {
     "(" -> LeftParen
     ")" -> RightParen
@@ -115,7 +128,12 @@ fn text_to_token_type(text) {
   }
 }
 
-fn maybe_equals(source, char, tokens, line) {
+fn maybe_equals(
+  source: String,
+  char: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   let result = string.pop_grapheme(source)
   case result {
     Ok(#("=", new_source)) ->
@@ -126,7 +144,11 @@ fn maybe_equals(source, char, tokens, line) {
   }
 }
 
-fn maybe_comment(source, tokens, line) {
+fn maybe_comment(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   case string.first(source) {
     Ok("/") -> scan_comment(source, tokens, line)
     Ok(_) -> add_simple_token(source, tokens, line, "/")
@@ -135,7 +157,11 @@ fn maybe_comment(source, tokens, line) {
   }
 }
 
-fn scan_comment(source, tokens, line) {
+fn scan_comment(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   case string.split_once(source, "\n") {
     Ok(#(_comment, new_source)) -> do_scan(new_source, tokens, line + 1)
     // This means a comment in the last line of the file
@@ -143,7 +169,11 @@ fn scan_comment(source, tokens, line) {
   }
 }
 
-fn add_string(source, tokens, line) {
+fn add_string(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   let result = string.split_once(source, "\"")
   case result {
     Ok(#(literal, new_source)) ->
@@ -153,7 +183,12 @@ fn add_string(source, tokens, line) {
   }
 }
 
-fn do_add_string(source, tokens, line, text) {
+fn do_add_string(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+  text,
+) -> LoxResult(List(Token)) {
   let newlines = case string.contains(text, "\n") {
     True -> count_newlines(text)
     False -> 0
@@ -162,24 +197,28 @@ fn do_add_string(source, tokens, line, text) {
   do_scan(source, [token, ..tokens], line + newlines)
 }
 
-fn count_newlines(text) {
+fn count_newlines(text: String) -> Int {
   text
   |> string.to_graphemes()
   |> list.filter(fn(char) { char == "\n" })
   |> list.length()
 }
 
-fn is_digit(char) {
+fn is_digit(char: String) -> Bool {
   let assert Ok(regex) = regex.from_string("[0-9]")
   regex.check(regex, char)
 }
 
-fn is_alpha(char) {
+fn is_alpha(char: String) -> Bool {
   let assert Ok(regex) = regex.from_string("[a-zA-Z_]")
   regex.check(regex, char)
 }
 
-fn add_number(source, tokens, line) {
+fn add_number(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   let result = number_text("", source, False)
   case result {
     Ok(#(text, new_source)) -> {
@@ -198,7 +237,11 @@ fn add_number(source, tokens, line) {
   }
 }
 
-fn number_text(current, source, decimal_found) {
+fn number_text(
+  current: String,
+  source: String,
+  decimal_found: Bool,
+) -> LoxResult(#(String, String)) {
   let result = string.pop_grapheme(source)
   case result, decimal_found {
     // Trying to have a number with two decimal points
@@ -214,7 +257,10 @@ fn number_text(current, source, decimal_found) {
   }
 }
 
-fn handle_decimal(current, source) {
+fn handle_decimal(
+  current: String,
+  source: String,
+) -> LoxResult(#(String, String)) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   // What follows a decimal point must be a digit
   case is_digit(char) {
@@ -228,7 +274,12 @@ fn handle_decimal(current, source) {
   }
 }
 
-fn handle_digit(current, char, source, decimal_found) {
+fn handle_digit(
+  current: String,
+  char: String,
+  source: String,
+  decimal_found: Bool,
+) -> LoxResult(#(String, String)) {
   case is_digit(char), decimal_found {
     // If the char is a digit, we append it to the number and recurse.
     True, _ ->
@@ -239,13 +290,17 @@ fn handle_digit(current, char, source, decimal_found) {
   }
 }
 
-fn is_alphanumeric(char) {
+fn is_alphanumeric(char: String) -> Bool {
   is_alpha(char) || is_digit(char)
 }
 
 // Handle identifiers and also tokens like "print" or "return", whose
 // text field is alphanumeric
-fn add_text_based(source, tokens, line) {
+fn add_text_based(
+  source: String,
+  tokens: List(Token),
+  line: Int,
+) -> LoxResult(List(Token)) {
   let result = identifier_text("", source)
   case result {
     Ok(#(text, new_source)) -> {
@@ -262,7 +317,10 @@ fn add_text_based(source, tokens, line) {
   }
 }
 
-fn identifier_text(current, source) {
+fn identifier_text(
+  current: String,
+  source: String,
+) -> LoxResult(#(String, String)) {
   case string.pop_grapheme(source) {
     Ok(#(char, new_source)) -> {
       case is_alphanumeric(char), new_source {
