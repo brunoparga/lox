@@ -174,10 +174,10 @@ fn function_declaration(
     _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
   }
   |> then(fn(result) {
-    let #(parameters, tokens2) = result
-    case list.length(parameters) >= 255 {
-      True -> Error(ParseError("Can't have more than 255 parameters."))
-      False ->
+    let #(parameters, [left_brace, ..tokens2]) = result
+    case list.length(parameters) >= 255, left_brace.token_type {
+      True, _ -> Error(ParseError("Can't have more than 255 parameters."))
+      False, LeftBrace ->
         block(statements, tokens2)
         |> then(fn(result1) {
           let assert #([Block(statements: body), ..statements], tokens3) =
@@ -186,6 +186,7 @@ fn function_declaration(
             FunDecl(name: name_token, params: parameters, body: body)
           Ok(#([fun_declaration, ..statements], tokens3))
         })
+      False, _ -> Error(ParseError("Expect '{' after parameter list."))
     }
   })
 }
