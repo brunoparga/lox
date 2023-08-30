@@ -18,7 +18,6 @@ import lox_gleam/types.{
   WhileStmt,
 }
 import lox_gleam/error.{LoxResult, RuntimeError}
-import lox_gleam/error_handler
 import lox_gleam/environment
 
 @external(erlang, "os", "system_time")
@@ -30,7 +29,7 @@ pub fn interpret(
 ) -> LoxResult(Environment) {
   case execute(statements, environment) {
     Ok(#([], new_environment)) -> Ok(new_environment)
-    Error(error) -> error_handler.handle_error(error)
+    Error(error) -> error.report_error(error)
   }
 }
 

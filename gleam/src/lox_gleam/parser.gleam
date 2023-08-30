@@ -6,7 +6,6 @@ import gleam/option
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/error.{LoxResult, ParseError}
-import lox_gleam/error_handler
 import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Comma, Else, Eof, Equal,
   EqualEqual, Expr, ExprStmt, FalseToken, For, Fun, FunDecl, Greater,
@@ -23,25 +22,20 @@ type ExprAndTokens =
 type StmtsAndTokens =
   #(List(Stmt), List(Token))
 
-pub fn parse(tokens: List(Token)) -> List(Stmt) {
-  case declaration(Ok(#([], tokens))) {
-    Ok(#(statements, [])) | Ok(#(statements, [Token(token_type: Eof, ..)])) ->
-      list.reverse(statements)
-    Ok(#(_statements, [Token(..)])) -> {
-      let _ =
-        error_handler.handle_error(ParseError(
-          message: "unexpected end of tokens.",
-        ))
-      []
+pub fn parse(tokens: LoxResult(List(Token))) -> LoxResult(List(Stmt)) {
+  tokens
+  |> result.then(fn(result) { declaration(Ok(#([], tokens))) })
+  |> result.then(fn(result) {
+    case result {
+      #(statements, []) | #(statements, [Token(token_type: Eof, ..)]) ->
+        list.reverse(statements)
+      #(_statements, [Token(..)]) ->
+        Error(ParseError(message: "unexpected end of tokens."))
+      #(statements, new_tokens) ->
+        // This handles the weird case of top-level blocks.
+        list.reverse(list.concat([list.reverse(parse(new_tokens)), statements]))
     }
-    Ok(#(statements, new_tokens)) ->
-      // This handles the weird case of top-level blocks.
-      list.reverse(list.concat([list.reverse(parse(new_tokens)), statements]))
-    Error(error) -> {
-      let _ = error_handler.handle_error(error)
-      []
-    }
-  }
+  })
 }
 
 fn declaration(
@@ -49,8 +43,12 @@ fn declaration(
 ) -> LoxResult(StmtsAndTokens) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
-    Ok(#(_statements, [_one_token])) ->
-      Error(ParseError(message: "you might be missing a semicolon."))
+    Ok(#(_statements, [one_token])) ->
+      Error(ParseError(
+        message: "you might be missing a semicolon on line " <> string.inspect(
+          line,
+        ) <> ".",
+      ))
     Ok(#(statements, tokens)) -> statement(statements, tokens)
     Error(error) -> Error(error)
   }

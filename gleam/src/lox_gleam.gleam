@@ -13,7 +13,6 @@ import gleam/option
 import gleam/string
 import lox_gleam/environment
 import lox_gleam/error
-import lox_gleam/error_handler
 import lox_gleam/interpreter
 import lox_gleam/parser
 import lox_gleam/scanner
@@ -23,7 +22,7 @@ pub fn main() -> error.LoxResult(types.Environment) {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
-    _ -> error_handler.handle_error(error.TooManyArgumentsError)
+    _ -> error.report_error(error.TooManyArgumentsError)
   }
 }
 
@@ -52,9 +51,7 @@ fn run_file(filename: String) -> error.LoxResult(types.Environment) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents, environment.create(option.None))
     Error(error) ->
-      error_handler.handle_error(error.ErlangError(message: string.inspect(
-        error,
-      )))
+      error.report_error(error.ErlangError(message: string.inspect(error)))
   }
 }
 
@@ -66,4 +63,5 @@ pub fn run(
   |> scanner.scan()
   |> parser.parse()
   |> interpreter.interpret(environment)
+  |> error.report_error()
 }

@@ -5,9 +5,9 @@
 import gleam/float
 import gleam/list
 import gleam/regex
+import gleam/result
 import gleam/string
-import lox_gleam/error.{LoxResult}
-import lox_gleam/error_handler
+import lox_gleam/error.{LoxResult, ScanError}
 import lox_gleam/types.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual,
   FalseToken, For, Fun, Greater, GreaterEqual, Identifier, If, LeftBrace,
@@ -16,14 +16,8 @@ import lox_gleam/types.{
   Star, StringToken, Super, This, Token, TokenType, TrueToken, Var, While,
 }
 
-pub fn scan(source: String) -> List(Token) {
-  case do_scan(source, [], 1) {
-    Ok(tokens) -> list.reverse(tokens)
-    Error(error) -> {
-      let _ = error_handler.handle_error(error)
-      []
-    }
-  }
+pub fn scan(source: String) -> LoxResult(List(Token)) {
+  result.try(do_scan(source, [], 1), fn(tokens) { list.reverse(tokens) })
 }
 
 fn do_scan(
@@ -70,7 +64,9 @@ fn scan_tokens(
         True, False -> add_number(source, tokens, line)
         False, True -> add_text_based(source, tokens, line)
         False, False ->
-          Error(error.ScanError("unexpected character.", line: line))
+          Error(ScanError(
+            "unexpected character on line " <> string.inspect(line) <> ".",
+          ))
       }
     }
   }
@@ -134,14 +130,20 @@ fn maybe_equals(
   tokens: List(Token),
   line: Int,
 ) -> LoxResult(List(Token)) {
-  let result = string.pop_grapheme(source)
-  case result {
-    Ok(#("=", new_source)) ->
-      add_simple_token(new_source, tokens, line, char <> "=")
-    Ok(_) -> add_simple_token(source, tokens, line, char)
-    Error(_reason) ->
-      Error(error.ScanError(message: "unexpected end of file.", line: line))
-  }
+  source
+  |> string.pop_grapheme()
+  |> result.then(fn(result) {
+    case result {
+      #("=", new_source) ->
+        add_simple_token(new_source, tokens, line, char <> "=")
+      _ -> add_simple_token(source, tokens, line, char)
+    }
+  })
+  |> result.map_error(fn(_) {
+    Error(ScanError(
+      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
+    ))
+  })
 }
 
 fn maybe_comment(
@@ -149,12 +151,19 @@ fn maybe_comment(
   tokens: List(Token),
   line: Int,
 ) -> LoxResult(List(Token)) {
-  case string.first(source) {
-    Ok("/") -> scan_comment(source, tokens, line)
-    Ok(_) -> add_simple_token(source, tokens, line, "/")
-    Error(_reason) ->
-      Error(error.ScanError(message: "unexpected end of file.", line: line))
-  }
+  source
+  |> string.first()
+  |> result.then(fn(result) {
+    case string.first(source) {
+      "/" -> scan_comment(source, tokens, line)
+      _ -> add_simple_token(source, tokens, line, "/")
+    }
+  })
+  |> result.map_error(fn(_) {
+    Error(ScanError(
+      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
+    ))
+  })
 }
 
 fn scan_comment(
@@ -174,20 +183,24 @@ fn add_string(
   tokens: List(Token),
   line: Int,
 ) -> LoxResult(List(Token)) {
-  let result = string.split_once(source, "\"")
-  case result {
-    Ok(#(literal, new_source)) ->
-      do_add_string(new_source, tokens, line, literal)
-    Error(_reason) ->
-      Error(error.ScanError(message: "unterminated string.", line: line))
-  }
+  source
+  |> string.split_once("\"")
+  |> result.then(fn(result) {
+    let #(literal, new_source) = result
+    do_add_string(new_source, tokens, line, literal)
+  })
+  |> result.map_error(fn(_) {
+    Error(ScanError(
+      message: "unterminated string on line " <> string.inspect(line) <> ".",
+    ))
+  })
 }
 
 fn do_add_string(
   source: String,
   tokens: List(Token),
   line: Int,
-  text,
+  text: String,
 ) -> LoxResult(List(Token)) {
   let newlines = case string.contains(text, "\n") {
     True -> count_newlines(text)
@@ -219,22 +232,14 @@ fn add_number(
   tokens: List(Token),
   line: Int,
 ) -> LoxResult(List(Token)) {
-  let result = number_text("", source, False)
-  case result {
-    Ok(#(text, new_source)) -> {
-      let assert Ok(value) = float.parse(text)
-      let token =
-        Token(token_type: NumberToken, value: LoxNumber(value), line: line)
-      do_scan(new_source, [token, ..tokens], line)
-    }
-    Error(error.ScanInvalidNumberError) ->
-      Error(error.ScanError("error with decimal point.", line: line))
-    Error(_reason) ->
-      Error(error.ScanError(
-        message: "unknown error when processing number.",
-        line: line,
-      ))
-  }
+  number_text("", source, False)
+  |> result.then(fn(result) {
+    let #(text, new_source) = result
+    let assert Ok(value) = float.parse(text)
+    let token =
+      Token(token_type: NumberToken, value: LoxNumber(value), line: line)
+    do_scan(new_source, [token, ..tokens], line)
+  })
 }
 
 fn number_text(
@@ -245,7 +250,10 @@ fn number_text(
   let result = string.pop_grapheme(source)
   case result, decimal_found {
     // Trying to have a number with two decimal points
-    Ok(#(".", _)), True -> Error(error.ScanInvalidNumberError)
+    Ok(#(".", _)), True ->
+      Error(ScanError(
+        "on line " <> string.inspect(line) <> "; a number can only have one decimal point.",
+      ))
     // Process the decimal and the first character after it
     Ok(#(".", new_source)), False -> handle_decimal(current, new_source)
     // See what the new character is - recurse or return
@@ -264,13 +272,16 @@ fn handle_decimal(
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   // What follows a decimal point must be a digit
   case is_digit(char) {
-    // If it is, we just consume it while we're at it.
-    // We also set the flag showing we've passed the decimal.
+    // If it is, why not just consume it. We also set the flag
+    // showing we're past the decimal.
     True -> {
       let new_current = current <> "." <> char
       number_text(new_current, new_source, True)
     }
-    False -> Error(error.ScanInvalidNumberError)
+    False ->
+      Error(ScanError(
+        "on line " <> string.inspect(line) <> "; a decimal point must be followed by a digit.",
+      ))
   }
 }
 
@@ -301,37 +312,40 @@ fn add_text_based(
   tokens: List(Token),
   line: Int,
 ) -> LoxResult(List(Token)) {
-  let result = identifier_text("", source)
-  case result {
-    Ok(#(text, new_source)) -> {
-      let token_type = text_to_token_type(text)
-      let value = case token_type {
-        Identifier -> LoxString(text)
-        _ -> LoxNil
-      }
-      let token = Token(token_type: token_type, value: value, line: line)
-      do_scan(new_source, [token, ..tokens], line)
+  identifier_text("", source, line)
+  |> result.then(fn(result) {
+    let #(text, new_source) = result
+    let token_type = text_to_token_type(text)
+    let value = case token_type {
+      Identifier -> LoxString(text)
+      _ -> LoxNil
     }
-    Error(_reason) ->
-      Error(error.ScanError(message: "unexpected end of file.", line: line))
-  }
+    let token = Token(token_type: token_type, value: value, line: line)
+    do_scan(new_source, [token, ..tokens], line)
+  })
 }
 
 fn identifier_text(
   current: String,
   source: String,
+  line: Int,
 ) -> LoxResult(#(String, String)) {
-  case string.pop_grapheme(source) {
-    Ok(#(char, new_source)) -> {
-      case is_alphanumeric(char), new_source {
-        // We're done scanning the lexeme
-        False, _ -> Ok(#(current, source))
-        // We're at the end of the source code
-        True, "" -> Ok(#(current <> char, ""))
-        // Not done yet, so we recurse
-        True, _ -> identifier_text(current <> char, new_source)
-      }
+  source
+  |> string.pop_grapheme()
+  |> result.then(fn(result) {
+    let #(char, new_source) = result
+    case is_alphanumeric(char), new_source {
+      // We're done scanning the lexeme
+      False, _ -> #(current, source)
+      // We're at the end of the source code
+      True, "" -> #(current <> char, "")
+      // Not done yet, so we recurse
+      True, _ -> identifier_text(current <> char, new_source, line)
     }
-    Error(_) -> Error(error.ScanUnexpectedEOFError)
-  }
+  })
+  |> result.map_error(fn(_) {
+    Error(ScanError(
+      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
+    ))
+  })
 }
