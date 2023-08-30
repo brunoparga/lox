@@ -387,13 +387,7 @@ fn call_function(result) {
   case callee_value {
     NativeFunction(arity: arity, ..) -> {
       case args_length == arity {
-        True -> {
-          let seconds = int.to_float(system_time()) /. 1_000_000_000.0
-          seconds
-          |> string.inspect
-          |> io.println
-          Ok(#(LoxNumber(seconds), environment))
-        }
+        True -> clock(environment)
         False -> Error(RuntimeError(message: message(arity)))
       }
     }
@@ -472,4 +466,12 @@ fn is_truthy(value: LoxValue) -> Bool {
   let is_nil = value == LoxNil
   let is_false = value == LoxBool(False)
   !is_nil && !is_false
+}
+
+fn clock(environment) {
+  let seconds = int.to_float(system_time()) /. 1_000_000_000.0
+  seconds
+  |> string.inspect
+  |> io.println
+  Ok(#(LoxNumber(seconds), environment))
 }
