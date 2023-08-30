@@ -68,7 +68,7 @@ fn do_execute(
         IfStmt(..) -> if_stmt(statement, other_statements, environment)
         PrintStmt(expression: expression) ->
           print_stmt(expression, other_statements, environment)
-        ReturnStmt(value: return_expr, ..) ->
+        ReturnStmt(value: return_expr) ->
           return_stmt(return_expr, environment)
         VarDecl(name, initializer) ->
           variable_declaration(name, initializer, other_statements, environment)

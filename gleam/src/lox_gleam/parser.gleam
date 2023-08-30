@@ -68,7 +68,7 @@ fn statement(
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
     Print -> basic_statement(statements, other_tokens, PrintStmt)
-    Return -> return_statement(first_token, statements, other_tokens)
+    Return -> return_statement(statements, other_tokens)
     Var -> declaration(var_declaration(statements, other_tokens))
     While -> while_statement(statements, other_tokens)
     _ -> basic_statement(statements, tokens, ExprStmt)
@@ -118,7 +118,7 @@ fn consume(
     True -> Ok(tokens1)
     False ->
       Error(ParseError(
-        message: "line " <> string.inspect(first_token.line) <> message,
+        message: "line " <> string.inspect(first_token.line) <> ": " <> message,
       ))
   }
 }
@@ -128,7 +128,7 @@ fn for_statement(
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
   tokens
-  |> consume(LeftParen, " expect '(' after 'for'.")
+  |> consume(LeftParen, "expect '(' after 'for'.")
   |> then(fn(tokens1) { for_stmt_initializer(statements, tokens1) })
   |> then(for_stmt_condition)
   |> then(for_stmt_increment)
@@ -177,7 +177,9 @@ fn for_stmt_condition(
   })
 }
 
-fn condition_expression(tokens: List(Token)) -> LoxResult(#(Option(Expr), List(Token))) {
+fn condition_expression(
+  tokens: List(Token),
+) -> LoxResult(#(Option(Expr), List(Token))) {
   let [token, ..tokens2] = tokens
   case token.token_type {
     Semicolon -> Ok(#(option.None, tokens2))
@@ -283,20 +285,11 @@ fn function_declaration(
     _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
   }
   |> then(fn(result) {
-    let #(parameters, [left_brace, ..tokens2]) = result
-    case list.length(parameters) >= 255, left_brace.token_type {
-      True, _ -> Error(ParseError("Can't have more than 255 parameters."))
-      False, LeftBrace ->
-        block(statements, tokens2)
-        |> then(fn(result1) {
-          let assert #([Block(statements: body), ..statements], tokens3) =
-            result1
-          let fun_declaration =
-            FunDecl(name: name_token, params: parameters, body: body)
-          Ok(#([fun_declaration, ..statements], tokens3))
-        })
-      False, _ -> Error(ParseError("Expect '{' after parameter list."))
-    }
+    let #(parameters, tokens2) = result
+    consume(tokens2, LeftBrace, "Expect '{' after parameter list.")
+    |> then(fn(tokens3) {
+      build_fun_declaration(parameters, statements, tokens3)
+    })
   })
 }
 
@@ -313,29 +306,36 @@ fn build_params(
   }
 }
 
+fn build_fun_declaration(
+  parameters: List(Token),
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
+  case list.length(parameters) >= 255 {
+    True -> Error(ParseError("Can't have more than 255 parameters."))
+    False ->
+      statements
+      |> block(tokens)
+      |> then(fn(result1) {
+        let assert #([Block(statements: body), ..statements], next_tokens) =
+          result1
+        let fun_declaration =
+          FunDecl(name: name_token, params: parameters, body: body)
+        #([fun_declaration, ..statements], next_tokens)
+      })
+  }
+}
+
 fn if_statement(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  let [first_token, ..new_tokens] = tokens
-  case first_token.token_type {
-    LeftParen -> if_condition_is_ok(statements, new_tokens)
-    _ -> Error(ParseError(message: "expect '(' after 'if'."))
-  }
-}
-
-fn if_condition_is_ok(
-  statements: List(Stmt),
-  tokens: List(Token),
-) -> LoxResult(StmtsAndTokens) {
-  tokens
-  |> expression()
+  consume(tokens, LeftParen, "expect '(' after 'if'.")
+  |> then(expression)
   |> then(fn(result) {
-    let #(condition, [right_paren, ..new_tokens]) = result
-    case right_paren.token_type {
-      RightParen -> do_if_statement(condition, statements, new_tokens)
-      _ -> Error(ParseError(message: "expect ')' after if condition."))
-    }
+    let #(condition, tokens1) = result
+    consume(tokens1, RightParen, "expect ')' after if condition.")
+    |> then(fn(tokens2) { do_if_statement(condition, statements, tokens2) })
   })
 }
 
@@ -346,26 +346,17 @@ fn do_if_statement(
 ) -> LoxResult(StmtsAndTokens) {
   // Currently doesn't work if the then branch is just one statement
   // (like return) outside of a block. It should.
-  statement(statements, tokens)
+  statements
+  |> statement(tokens)
   |> then(fn(result) {
-    case result {
-      #([then_branch, ..new_statements], [else, ..new_tokens] as result_tokens) -> {
-        case else.token_type {
-          Else ->
-            if_then_else(condition, then_branch, new_statements, new_tokens)
-          _ ->
-            if_without_else(
-              condition,
-              then_branch,
-              new_statements,
-              result_tokens,
-            )
-        }
-      }
-      #(_, [not_else, ..]) ->
-        Error(ParseError(
-          message: "Error at '" <> string.inspect(not_else.value) <> "': Expect expression.",
-        ))
+    let #(
+      [then_branch, ..new_statements],
+      [else, ..new_tokens] as result_tokens,
+    ) = result
+    case else.token_type {
+      Else -> if_then_else(condition, then_branch, new_statements, new_tokens)
+      _ ->
+        if_without_else(condition, then_branch, new_statements, result_tokens)
     }
   })
 }
@@ -405,7 +396,6 @@ fn if_without_else(
 }
 
 fn return_statement(
-  return_token: Token,
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
@@ -417,14 +407,17 @@ fn return_statement(
         ReturnStmt(keyword: return_token, value: nil_return_value)
       #(return_stmt, new_tokens)
     }
-    _ -> {
-      let assert Ok(#(
-        return_value,
-        [Token(token_type: Semicolon, ..), ..tokens1],
-      )) = expression(tokens)
-      let return_stmt = ReturnStmt(keyword: return_token, value: return_value)
-      #(return_stmt, tokens1)
-    }
+    _ ->
+      tokens
+      |> expression()
+      |> then(fn(result) {
+        let #(return_value, tokens1) = result
+        consume(tokens1, Semicolon, "expect ';' after return statement.")
+        |> then(fn(tokens2) {
+          let return_stmt = ReturnStmt(value: return_value)
+          #(return_stmt, tokens2)
+        })
+      })
   }
   declaration(Ok(#([return_stmt, ..statements], other_tokens)))
 }
@@ -433,32 +426,24 @@ fn var_declaration(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  let [variable_name, ..tokens1] = tokens
-  case variable_name.token_type {
-    Identifier -> do_var_declaration(variable_name, statements, tokens1)
-    _ -> Error(ParseError(message: "expect variable name."))
-  }
-}
-
-fn do_var_declaration(
-  variable_name: Token,
-  statements: List(Stmt),
-  tokens: List(Token),
-) -> LoxResult(StmtsAndTokens) {
-  let [maybe_equal, ..new_tokens] = tokens
-  case maybe_equal.token_type {
-    Equal ->
-      var_declaration_with_assignment(variable_name, statements, new_tokens)
-    Semicolon -> {
-      let nil_expr = Literal(LoxNil, variable_name.line)
-      let var_declaration = VarDecl(name: variable_name, initializer: nil_expr)
-      Ok(#([var_declaration, ..statements], new_tokens))
+  consume(tokens, Identifier, "expect variable name.")
+  |> then(fn(tokens1) {
+    let [maybe_equal, ..tokens2] = tokens1
+    case maybe_equal.token_type {
+      Equal ->
+        var_declaration_with_assignment(variable_name, statements, tokens2)
+      Semicolon -> {
+        let nil_expr = Literal(LoxNil, variable_name.line)
+        let var_declaration =
+          VarDecl(name: variable_name, initializer: nil_expr)
+        Ok(#([var_declaration, ..statements], tokens2))
+      }
+      _ ->
+        Error(ParseError(
+          message: "a variable declaration must be followed by ';' or an assignment.",
+        ))
     }
-    _ ->
-      Error(ParseError(
-        message: "a variable declaration must be followed by an assignment or ';'.",
-      ))
-  }
+  })
 }
 
 fn var_declaration_with_assignment(
@@ -468,17 +453,16 @@ fn var_declaration_with_assignment(
 ) -> LoxResult(StmtsAndTokens) {
   expression(tokens)
   |> then(fn(result) {
-    let #(expr, [semicolon, ..new_tokens]) = result
-    case semicolon.token_type {
-      Semicolon -> {
-        let var_declaration = VarDecl(name: name, initializer: expr)
-        Ok(#([var_declaration, ..statements], new_tokens))
-      }
-      _ ->
-        Error(ParseError(
-          message: "a variable declaration with assignment must be followed by ';'.",
-        ))
-    }
+    let #(expr, tokens1) = result
+    consume(
+      tokens1,
+      Semicolon,
+      "a variable declaration with assignment must be followed by ';'.",
+    )
+    |> then(fn(tokens2) {
+      let var_declaration = VarDecl(name: name, initializer: expr)
+      #([var_declaration, ..statements], tokens2)
+    })
   })
 }
 
@@ -486,25 +470,15 @@ fn while_statement(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  let [first_token, ..new_tokens] = tokens
-  case first_token.token_type {
-    LeftParen -> while_condition_is_ok(statements, new_tokens)
-    _ -> Error(ParseError(message: "expect '(' after 'while'."))
-  }
-}
-
-fn while_condition_is_ok(
-  statements: List(Stmt),
-  tokens: List(Token),
-) -> LoxResult(StmtsAndTokens) {
-  tokens
-  |> expression()
-  |> then(fn(result) {
-    let #(condition, [right_paren, ..new_tokens]) = result
-    case right_paren.token_type {
-      RightParen -> do_while_statement(condition, statements, new_tokens)
-      _ -> Error(ParseError(message: "expect ')' after while condition."))
-    }
+  consume(tokens, LeftParen, "expect '(' after 'while'.")
+  |> then(fn(tokens1) {
+    tokens1
+    |> expression()
+    |> then(fn(result) {
+      let #(condition, tokens2) = result
+      consume(tokens2, RightParen, "expect ')' after while condition.")
+      |> then(fn(tokens3) { do_while_statement(condition, statements, tokens3) })
+    })
   })
 }
 
@@ -701,22 +675,17 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 
 fn do_grouping(
   first_token: Token,
-  other_tokens: List(Token),
+  tokens: List(Token),
 ) -> LoxResult(ExprAndTokens) {
-  other_tokens
+  tokens
   |> expression()
   |> then(fn(result) {
-    case result {
-      #(inner_expr, [Token(value: LoxString(")"), ..), ..tokens2]) -> {
-        let expr = Grouping(expression: inner_expr, line: first_token.line)
-        Ok(#(expr, tokens2))
-      }
-      #(_inner_expr, [Token(value: not_right_paren, ..), ..]) -> {
-        Error(ParseError(
-          message: "unmatched '(', got " <> string.inspect(not_right_paren) <> " instead.",
-        ))
-      }
-    }
+    let #(inner_expr, tokens1) = result
+    consume(tokens1, RightParen, "unmatched '('.")
+    |> then(fn(tokens2) {
+      let expr = Grouping(expression: inner_expr, line: first_token.line)
+      #(expr, tokens2)
+    })
   })
 }
 
