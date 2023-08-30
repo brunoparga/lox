@@ -104,6 +104,7 @@ fn fun_declaration(
     LoxFunction(
       arity: list.length(params),
       to_string: "<fn " <> string.inspect(name_token.value) <> ">",
+      closure: environment,
       declaration: fun_decl,
     )
   let environment1 = environment.define(environment, name_token.value, function)
@@ -415,7 +416,10 @@ fn evaluate_call(
   evaluate(callee, environment)
   |> then(fn(result) {
     let #(callee_value, environment1) = result
-    let initial_env = Ok(#([], environment1))
+    let initial_env = case callee_value {
+      LoxFunction(closure: closure, ..) -> Ok(#([], closure))
+      _ -> Ok(#([], environment1))
+    }
     list.fold(arguments, initial_env, evaluate_arguments)
     |> result.map(fn(args_and_environment) {
       let #(args, env) = args_and_environment

@@ -35,7 +35,12 @@ pub type Expr {
 
 pub type LoxValue {
   LoxBool(Bool)
-  LoxFunction(arity: Int, declaration: Stmt, to_string: String)
+  LoxFunction(
+    arity: Int,
+    declaration: Stmt,
+    closure: Environment,
+    to_string: String,
+  )
   LoxNil
   LoxNumber(Float)
   LoxString(String)
