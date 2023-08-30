@@ -9,14 +9,13 @@ import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result.{then}
 import gleam/string
-import lox_gleam/types.{
-  And, Assign, Bang, BangEqual, Binary, Block, Call, EqualEqual, ExprStmt,
-  FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual, Literal,
-  Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString, LoxValue, Minus,
-  NativeFunction, Or, Plus, PrintStmt, ReturnStmt, ReturnValue, Slash, Star,
-  Stmt, TokenType, Unary, VarDecl, Variable, WhileStmt,
+import lox_gleam/environment.{
+  And, Assign, Bang, BangEqual, Binary, Block, Call, Environment, EqualEqual,
+  ExprStmt, FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual,
+  Literal, Local, Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString,
+  LoxValue, Minus, NativeFunction, Or, Plus, PrintStmt, ReturnStmt, ReturnValue,
+  Slash, Star, Stmt, Token, TokenType, Unary, VarDecl, Variable, WhileStmt,
 }
-import lox_gleam/environment.{Environment, Local}
 import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/error_handler
 
@@ -402,7 +401,7 @@ fn call_function(result) {
   }
 }
 
-fn do_call_function(params: List(types.Token), arguments, body, environment) {
+fn do_call_function(params: List(Token), arguments, body, environment) {
   let fun_environment = environment.create(Some(environment))
   let assert Ok(block_environment) =
     params
