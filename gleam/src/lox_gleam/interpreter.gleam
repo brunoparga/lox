@@ -152,12 +152,12 @@ fn print_stmt(expression, statements, environment) {
           True ->
             number
             |> float.truncate()
-            |> string.inspect
-            |> io.println
+            |> string.inspect()
+            |> io.println()
           False ->
             number
-            |> string.inspect
-            |> io.println
+            |> string.inspect()
+            |> io.println()
         }
       LoxString(text) -> io.println(text)
       NativeFunction(to_string: to_string, ..) -> io.println(to_string)
@@ -471,7 +471,7 @@ fn is_truthy(value: LoxValue) -> Bool {
 fn clock(environment) {
   let seconds = int.to_float(system_time()) /. 1_000_000_000.0
   seconds
-  |> string.inspect
-  |> io.println
+  |> string.inspect()
+  |> io.println()
   Ok(#(LoxNumber(seconds), environment))
 }

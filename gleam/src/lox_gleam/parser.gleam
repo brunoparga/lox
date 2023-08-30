@@ -98,7 +98,7 @@ fn for_statement(statements, tokens: List(Token)) {
         Semicolon -> Ok(#(option.None, tokens4))
         _ ->
           tokens3
-          |> expression
+          |> expression()
           |> then(fn(result) {
             let #(expr, new_tokens) = result
             Ok(#(option.Some(expr), new_tokens))
@@ -110,7 +110,7 @@ fn for_statement(statements, tokens: List(Token)) {
         RightParen -> Ok(#(option.None, tokens6))
         _ ->
           tokens6
-          |> expression
+          |> expression()
           |> then(fn(result) {
             let #(expr, [_right_paren, ..new_tokens]) = result
             Ok(#(option.Some(expr), new_tokens))
@@ -200,7 +200,7 @@ fn if_statement(statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) {
 
 fn if_condition_is_ok(statements, tokens) {
   tokens
-  |> expression
+  |> expression()
   |> then(fn(result) {
     let #(condition, [right_paren, ..new_tokens]) = result
     case right_paren.token_type {
@@ -334,7 +334,7 @@ fn while_statement(statements, tokens) {
 
 fn while_condition_is_ok(statements, tokens) {
   tokens
-  |> expression
+  |> expression()
   |> then(fn(result) {
     let #(condition, [right_paren, ..new_tokens]) = result
     case right_paren.token_type {
@@ -376,7 +376,7 @@ fn block(existing_statements, tokens: List(Token)) -> LoxResult(StmtsAndTokens) 
 
 fn do_statement(statements, tokens, stmt_type) {
   tokens
-  |> expression
+  |> expression()
   |> then(fn(result) {
     let #(expr, [Token(token_type: Semicolon, ..), ..new_tokens]) = result
     let new_statement = stmt_type(expr)
@@ -390,7 +390,7 @@ fn expression(tokens) -> LoxResult(ExprAndTokens) {
 
 fn assignment(tokens) -> LoxResult(ExprAndTokens) {
   tokens
-  |> or
+  |> or()
   |> then(fn(result) {
     case result {
       #(name_expr, []) ->
@@ -414,7 +414,7 @@ fn do_assignment(name_expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 
 fn do_valid_assignment(name_expr, tokens) {
   tokens
-  |> assignment
+  |> assignment()
   |> then(fn(result) {
     let #(value_expr, new_tokens) = result
     case name_expr {
@@ -427,13 +427,13 @@ fn do_valid_assignment(name_expr, tokens) {
 
 fn or(tokens) {
   tokens
-  |> and
+  |> and()
   |> binary_inner([Or], and, Logical)
 }
 
 fn and(tokens) {
   tokens
-  |> equality
+  |> equality()
   |> binary_inner([And], equality, Logical)
 }
 
@@ -471,7 +471,7 @@ fn unary(tokens) -> LoxResult(ExprAndTokens) {
 
 fn do_unary(first_token, tokens) {
   tokens
-  |> unary
+  |> unary()
   |> then(fn(result) {
     let #(right, new_tokens) = result
     let Token(line: line, token_type: token_type, ..) = first_token
@@ -482,7 +482,7 @@ fn do_unary(first_token, tokens) {
 
 fn call(tokens: List(Token)) {
   tokens
-  |> primary
+  |> primary()
   |> then(fn(result) {
     let #(callee, [left_paren, ..remaining_tokens] as new_tokens) = result
     case left_paren.token_type {
@@ -522,7 +522,7 @@ fn build_arguments(
   tokens,
 ) -> LoxResult(#(List(Expr), Token, List(Token))) {
   tokens
-  |> expression
+  |> expression()
   |> then(fn(result) {
     let #(argument, [comma_or_paren, ..new_tokens]) = result
     case comma_or_paren.token_type {
@@ -556,7 +556,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 
 fn do_grouping(first_token: Token, other_tokens) {
   other_tokens
-  |> expression
+  |> expression()
   |> then(fn(result) {
     case result {
       #(inner_expr, [Token(value: LoxString(")"), ..), ..tokens2]) -> {
@@ -613,7 +613,7 @@ fn build_binary(
   expr_type,
 ) {
   other_tokens
-  |> function
+  |> function()
   |> then(fn(result) {
     let #(right, tokens2) = result
     let Token(line: line, token_type: token_type, ..) = first_token
