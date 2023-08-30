@@ -43,7 +43,7 @@ fn declaration(
 ) -> LoxResult(StmtsAndTokens) {
   case stmts_and_tokens {
     Ok(#(statements, [Token(Eof, ..)])) -> Ok(#(statements, []))
-    Ok(#(_statements, [one_token])) ->
+    Ok(#(_statements, [Token(line: line, ..)])) ->
       Error(ParseError(
         message: "you might be missing a semicolon on line " <> string.inspect(
           line,
@@ -67,11 +67,44 @@ fn statement(
     If -> if_statement(statements, other_tokens)
     LeftBrace -> block(statements, other_tokens)
     RightBrace -> Ok(#(statements, other_tokens))
-    Print -> do_statement(statements, other_tokens, PrintStmt)
+    Print -> basic_statement(statements, other_tokens, PrintStmt)
     Return -> return_statement(first_token, statements, other_tokens)
     Var -> declaration(var_declaration(statements, other_tokens))
     While -> while_statement(statements, other_tokens)
-    _ -> do_statement(statements, tokens, ExprStmt)
+    _ -> basic_statement(statements, tokens, ExprStmt)
+  }
+}
+
+fn basic_statement(statements: List(Stmt), tokens: List(Token), stmt_type) {
+  tokens
+  |> expression()
+  |> then(fn(result) {
+    let #(expr, [Token(token_type: Semicolon, ..), ..new_tokens]) = result
+    let new_statement = stmt_type(expr)
+    declaration(Ok(#([new_statement, ..statements], new_tokens)))
+  })
+}
+
+fn block(
+  existing_statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(StmtsAndTokens) {
+  let assert Ok(first_token) = list.first(tokens)
+  case first_token.token_type {
+    Eof ->
+      Error(ParseError(
+        message: "unexpected end of file while parsing block on line " <> int.to_string(
+          first_token.line,
+        ) <> ".",
+      ))
+    _ -> {
+      declaration(Ok(#([], tokens)))
+      |> then(fn(result) {
+        let #(block_statements, new_tokens) = result
+        let block = Block(list.reverse(block_statements))
+        Ok(#([block, ..existing_statements], new_tokens))
+      })
+    }
   }
 }
 
@@ -88,13 +121,6 @@ fn consume(
         message: "line " <> string.inspect(first_token.line) <> message,
       ))
   }
-}
-
-fn extract_stmt(
-  result: #(List(Stmt), List(Token)),
-) -> LoxResult(#(Option(Stmt), List(Stmt), List(Token))) {
-  let #([stmt, ..other_statements], tokens) = result
-  Ok(#(option.Some(stmt), other_statements, tokens))
 }
 
 fn for_statement(
@@ -121,10 +147,17 @@ fn for_stmt_initializer(
       var_declaration(statements, tokens)
       |> then(extract_stmt)
     _ -> {
-      do_statement(statements, tokens, ExprStmt)
+      basic_statement(statements, tokens, ExprStmt)
       |> then(extract_stmt)
     }
   }
+}
+
+fn extract_stmt(
+  result: #(List(Stmt), List(Token)),
+) -> LoxResult(#(Option(Stmt), List(Stmt), List(Token))) {
+  let #([stmt, ..other_statements], tokens) = result
+  Ok(#(option.Some(stmt), other_statements, tokens))
 }
 
 fn for_stmt_condition(
@@ -493,35 +526,6 @@ fn do_while_statement(
   })
 }
 
-fn block(
-  existing_statements: List(Stmt),
-  tokens: List(Token),
-) -> LoxResult(StmtsAndTokens) {
-  let assert Ok(first_token) = list.first(tokens)
-  case first_token.token_type {
-    Eof ->
-      Error(ParseError(message: "unexpected end of file while parsing block."))
-    _ -> {
-      declaration(Ok(#([], tokens)))
-      |> then(fn(result) {
-        let #(block_statements, new_tokens) = result
-        let block = Block(list.reverse(block_statements))
-        Ok(#([block, ..existing_statements], new_tokens))
-      })
-    }
-  }
-}
-
-fn do_statement(statements: List(Stmt), tokens: List(Token), stmt_type) {
-  tokens
-  |> expression()
-  |> then(fn(result) {
-    let #(expr, [Token(token_type: Semicolon, ..), ..new_tokens]) = result
-    let new_statement = stmt_type(expr)
-    declaration(Ok(#([new_statement, ..statements], new_tokens)))
-  })
-}
-
 fn expression(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   assignment(tokens)
 }
@@ -650,7 +654,7 @@ fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
         case left_paren.token_type {
           LeftParen -> finish_call(call_expr, new_tokens)
           // `left_paren` here is actually a semicolon, needed for matching
-          // at `do_statement`
+          // at `basic_statement`
           _ -> Ok(#(call_expr, [left_paren, ..new_tokens]))
         }
       }
