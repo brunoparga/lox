@@ -2,7 +2,7 @@
 //// returns an abstract syntax tree.
 
 import gleam/list
-import gleam/option
+import gleam/option.{None, Option, Some}
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/error.{LoxResult, ParseError}
@@ -75,84 +75,162 @@ fn statement(
   }
 }
 
+fn consume(
+  tokens: List(Token),
+  token_type: TokenType,
+  message: String,
+) -> LoxResult(List(Token)) {
+  let [first_token, ..tokens1] = tokens
+  case first_token.token_type == token_type {
+    True -> Ok(tokens1)
+    False ->
+      Error(ParseError(
+        message: "line " <> string.inspect(first_token.line) <> message,
+      ))
+  }
+}
+
+fn extract_stmt(
+  result: #(List(Stmt), List(Token)),
+) -> LoxResult(#(Option(Stmt), List(Stmt), List(Token))) {
+  let #([stmt, ..other_statements], tokens) = result
+  Ok(#(option.Some(stmt), other_statements, tokens))
+}
+
 fn for_statement(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  let stmt_extractor = fn(result) {
-    let #([stmt, ..new_statements], new_tokens) = result
-    Ok(#(option.Some(stmt), new_statements, new_tokens))
-  }
-  let [first_token, ..tokens1] = tokens
-  case first_token.token_type {
-    LeftParen -> {
-      let [second_token, ..tokens2] = tokens1
-      let assert Ok(#(initializer_stmt, statements2, tokens3)) = case
-        second_token.token_type
-      {
-        Semicolon -> Ok(#(option.None, statements, tokens2))
-        Var ->
-          var_declaration(statements, tokens2)
-          |> then(stmt_extractor)
-        _ -> {
-          do_statement(statements, tokens2, ExprStmt)
-          |> then(stmt_extractor)
-        }
-      }
+  tokens
+  |> consume(LeftParen, " expect '(' after 'for'.")
+  |> then(fn(tokens1) { for_stmt_initializer(statements, tokens1) })
+  |> then(for_stmt_condition)
+  |> then(for_stmt_increment)
+  |> then(for_stmt_body)
+  |> then(desugar_into_while)
+}
 
-      let [third_token, ..tokens4] = tokens3
-      let assert Ok(#(condition_expr, tokens5)) = case third_token.token_type {
-        Semicolon -> Ok(#(option.None, tokens4))
-        _ ->
-          tokens3
-          |> expression()
-          |> then(fn(result) {
-            let #(expr, new_tokens) = result
-            Ok(#(option.Some(expr), new_tokens))
-          })
-      }
-
-      let [fourth_token, ..tokens6] = tokens5
-      let assert Ok(#(increment_expr, tokens7)) = case fourth_token.token_type {
-        RightParen -> Ok(#(option.None, tokens6))
-        _ ->
-          tokens6
-          |> expression()
-          |> then(fn(result) {
-            let #(expr, [_right_paren, ..new_tokens]) = result
-            Ok(#(option.Some(expr), new_tokens))
-          })
-      }
-
-      let assert Ok(#([body0, ..statements3], tokens8)) =
-        statement(statements2, tokens7)
-
-      let body1 = case increment_expr {
-        option.None -> body0
-        option.Some(expr) -> {
-          let increment_stmt = ExprStmt(expr)
-          case body0 {
-            Block(statements) ->
-              Block(list.append(statements, [increment_stmt]))
-            _ -> Block([body0, increment_stmt])
-          }
-        }
-      }
-
-      let while_condition = case condition_expr {
-        option.None -> Literal(value: LoxBool(True), line: third_token.line)
-        option.Some(expr) -> expr
-      }
-
-      let while_stmt = WhileStmt(condition: while_condition, body: body1)
-
-      let final_while = case initializer_stmt {
-        option.None -> while_stmt
-        option.Some(init_stmt) -> Block([init_stmt, while_stmt])
-      }
-      declaration(Ok(#([final_while, ..statements3], tokens8)))
+fn for_stmt_initializer(
+  statements: List(Stmt),
+  tokens: List(Token),
+) -> LoxResult(#(Option(Stmt), List(Stmt), List(Token))) {
+  let [token, ..] = tokens
+  case token.token_type {
+    Semicolon -> Ok(#(option.None, statements, tokens))
+    Var ->
+      var_declaration(statements, tokens)
+      |> then(extract_stmt)
+    _ -> {
+      do_statement(statements, tokens, ExprStmt)
+      |> then(extract_stmt)
     }
-    _ -> Error(ParseError(message: "expect '(' after 'for'."))
+  }
+}
+
+fn for_stmt_condition(
+  result: #(Option(Stmt), List(Stmt), List(Token)),
+) -> LoxResult(#(Option(Stmt), Expr, List(Stmt), List(Token))) {
+  let #(initializer_stmt, statements, tokens) = result
+
+  tokens
+  |> condition_expression()
+  |> then(fn(condition_and_tokens) {
+    let #(condition_expr, new_tokens) = condition_and_tokens
+    let for_condition = case condition_expr {
+      option.None -> Literal(value: LoxBool(True), line: token.line)
+      option.Some(expr) -> expr
+    }
+    #(initializer_stmt, for_condition, statements, new_tokens)
+  })
+}
+
+fn condition_expression(tokens: List(Token)) -> LoxResult(#(Option(Expr), List(Token))) {
+  let [token, ..tokens2] = tokens
+  case token.token_type {
+    Semicolon -> Ok(#(option.None, tokens2))
+    _ ->
+      tokens
+      |> expression()
+      |> then(fn(result) {
+        let #(expr, token3) = result
+        #(option.Some(expr), token3)
+      })
+  }
+}
+
+fn for_stmt_increment(
+  result: #(Option(Stmt), Expr, List(Stmt), List(Token)),
+) -> LoxResult(#(Option(Stmt), Expr, Option(Expr), List(Stmt), List(Token))) {
+  let #(initializer_stmt, for_condition, statements, [token, ..tokens]) = result
+  case token.token_type {
+    RightParen -> Ok(#(option.None, tokens))
+    _ ->
+      tokens
+      |> expression()
+      |> then(fn(result) {
+        let #(expr, [_right_paren, ..new_tokens]) = result
+        #(option.Some(expr), new_tokens)
+      })
+  }
+  |> then(fn(increment_and_tokens) {
+    let #(increment_expr, other_tokens) = increment_and_tokens
+    #(initializer_stmt, for_condition, increment_expr, statements, tokens3)
+  })
+}
+
+fn for_stmt_body(
+  result: #(Option(Stmt), Expr, Option(Expr), List(Stmt), List(Token)),
+) -> LoxResult(#(Option(Stmt), Expr, Option(Expr), List(Stmt), List(Token))) {
+  let #(initializer_stmt, for_condition, increment_expr, statements, tokens) =
+    result
+  statement(statements, tokens)
+  |> then(fn(stmts_and_tokens) {
+    let #(statements_with_body, other_tokens) = stmts_and_tokens
+    #(
+      initializer_stmt,
+      for_condition,
+      increment_expr,
+      statements_with_body,
+      other_tokens,
+    )
+  })
+}
+
+fn desugar_into_while(
+  result: #(Option(Stmt), Expr, Option(Expr), List(Stmt), List(Token)),
+) -> LoxResult(StmtsAndTokens) {
+  fn(result) {
+    let #(init_stmt, condition_expr, increment_expr, [body0, ..stmts2], tokens2) =
+      result
+
+    let body1 = body_with_increment(increment_expr, body0)
+
+    let while_stmt =
+      WhileStmt(condition: condition_expr, body: body1)
+
+    let final_while = case init_stmt {
+      option.None -> while_stmt
+      option.Some(initializer) -> Block([initializer, while_stmt])
+    }
+    declaration(Ok(#([final_while, ..stmts2], tokens2)))
+  }
+}
+
+fn body_with_increment(
+  increment_expr: Option(Expr),
+  body0: Stmt,
+  line: Int,
+) -> Stmt {
+  case increment_expr {
+    option.None -> body0
+    option.Some(expr) -> {
+      let increment_stmt = ExprStmt(expression: expr, line: line)
+      case body0 {
+        Block(statements, ..) ->
+          Block(list.append(statements, [increment_stmt]), line)
+        _ -> Block([body0, increment_stmt], line)
+      }
+    }
   }
 }
 
