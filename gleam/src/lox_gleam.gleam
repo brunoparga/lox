@@ -17,6 +17,7 @@ import lox_gleam/error_handler
 import lox_gleam/interpreter
 import lox_gleam/parser
 import lox_gleam/scanner
+import lox_gleam/types
 
 pub fn main() {
   case erlang.start_arguments() {
@@ -54,7 +55,7 @@ fn run_file(filename: String) {
   }
 }
 
-pub fn run(source: String, environment: environment.Environment) {
+pub fn run(source: String, environment: types.Environment) {
   let ast =
     source
     |> scanner.scan()

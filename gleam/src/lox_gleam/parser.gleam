@@ -7,7 +7,7 @@ import gleam/result.{then}
 import gleam/string
 import lox_gleam/error.{LoxResult, ParseError}
 import lox_gleam/error_handler
-import lox_gleam/environment.{
+import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Comma, Else, Eof, Equal,
   EqualEqual, Expr, ExprStmt, FalseToken, For, Fun, FunDecl, Greater,
   GreaterEqual, Grouping, Identifier, If, IfStmt, LeftBrace, LeftParen, Less,

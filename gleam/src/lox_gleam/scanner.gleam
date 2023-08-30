@@ -8,7 +8,7 @@ import gleam/regex
 import gleam/string
 import lox_gleam/error
 import lox_gleam/error_handler
-import lox_gleam/environment.{
+import lox_gleam/types.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual,
   FalseToken, For, Fun, Greater, GreaterEqual, Identifier, If, LeftBrace,
   LeftParen, Less, LessEqual, LoxNil, LoxNumber, LoxString, Minus, NilToken,

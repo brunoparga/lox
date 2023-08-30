@@ -9,7 +9,7 @@ import gleam/option.{None, Some}
 import gleam/pair
 import gleam/result.{then}
 import gleam/string
-import lox_gleam/environment.{
+import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Environment, EqualEqual,
   ExprStmt, FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual,
   Literal, Local, Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString,
@@ -18,6 +18,7 @@ import lox_gleam/environment.{
 }
 import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/error_handler
+import lox_gleam/environment
 
 @external(erlang, "os", "system_time")
 pub fn system_time() -> Int
