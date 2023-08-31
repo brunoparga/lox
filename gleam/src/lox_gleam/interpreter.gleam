@@ -13,9 +13,8 @@ import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Environment, EqualEqual,
   Expr, ExprStmt, FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less,
   LessEqual, Literal, Local, Logical, LoxBool, LoxFunction, LoxNil, LoxNumber,
-  LoxString, LoxValue, Minus, NativeFunction, Or, Plus, PrintStmt, ReturnStmt,
-  ReturnValue, Slash, Star, Stmt, Token, TokenType, Unary, VarDecl, Variable,
-  WhileStmt,
+  LoxString, LoxValue, Minus, NativeFunction, Or, Plus, PrintStmt,
+  ReturnValue, Slash, Star, Stmt, TokenType, Unary, VarDecl, Variable, WhileStmt,
 }
 import lox_gleam/error.{LoxResult, RuntimeError}
 import lox_gleam/environment
@@ -27,10 +26,12 @@ pub fn interpret(
   statements: List(Stmt),
   environment: Environment,
 ) -> LoxResult(Environment) {
-  case execute(statements, environment) {
-    Ok(#([], new_environment)) -> Ok(new_environment)
-    Error(error) -> error.report_error(error)
-  }
+  statements
+  |> execute(environment)
+  |> result.map(fn(result) {
+    let #([], new_environment) = result
+    new_environment
+  })
 }
 
 fn execute(
@@ -53,29 +54,22 @@ fn do_execute(
 ) -> LoxResult(#(List(Stmt), Environment)) {
   case statements {
     [] -> Ok(#([], environment))
-    _ -> {
-      let [statement, ..other_statements] = statements
-      case statement {
-        Block(block_statements) -> {
-          block(block_statements, environment)
-          |> then(fn(new_environment) {
-            execute(other_statements, new_environment)
-          })
-        }
-        ExprStmt(expression: expression) ->
-          expression_stmt(expression, other_statements, environment)
-        FunDecl(..) -> fun_declaration(statement, other_statements, environment)
-        IfStmt(..) -> if_stmt(statement, other_statements, environment)
-        PrintStmt(expression: expression) ->
-          print_stmt(expression, other_statements, environment)
-        ReturnStmt(value: return_expr) ->
-          return_stmt(return_expr, environment)
-        VarDecl(name, initializer) ->
-          variable_declaration(name, initializer, other_statements, environment)
-        WhileStmt(condition, body) ->
-          while_stmt(condition, body, other_statements, environment)
-      }
+    [Block(block_statements, ..), ..other_statements] -> {
+      block(block_statements, environment)
+      |> then(fn(new_environment) { execute(other_statements, new_environment) })
     }
+    [ExprStmt(expression, ..), ..other_statements] ->
+      expression_stmt(expression, other_statements, environment)
+    [FunDecl(..) as statement, ..other_statements] ->
+      fun_declaration(statement, other_statements, environment)
+    [IfStmt(..) as statement, ..other_statements] ->
+      if_stmt(statement, other_statements, environment)
+    [PrintStmt(expression: expression, ..), ..other_statements] ->
+      print_stmt(expression, other_statements, environment)
+    [VarDecl(name, initializer, ..), ..other_statements] ->
+      variable_declaration(name, initializer, other_statements, environment)
+    [WhileStmt(condition, body, ..), ..other_statements] ->
+      while_stmt(condition, body, other_statements, environment)
   }
 }
 
@@ -87,9 +81,15 @@ fn block(
   |> Some()
   |> environment.create()
   |> execute(block_statements, _)
-  |> then(fn(result) {
+  |> result.map(fn(result) {
     let assert #([], Local(parent: new_parent, ..)) = result
-    Ok(new_parent)
+    new_parent
+  })
+  |> result.map_error(fn(_) {
+    let [stmt, ..] = block_statements
+    RuntimeError(
+      "something went wrong with block on line " <> types.stmt_line(stmt),
+    )
   })
 }
 
@@ -98,15 +98,15 @@ fn fun_declaration(
   other_statements: List(Stmt),
   environment: Environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  let assert FunDecl(name: name_token, params: params, ..) = fun_decl
+  let assert FunDecl(name: name, params: params, ..) = fun_decl
   let function =
     LoxFunction(
       arity: list.length(params),
-      to_string: "<fn " <> string.inspect(name_token.value) <> ">",
+      to_string: "<fn " <> string.inspect(name) <> ">",
       closure: environment,
       declaration: fun_decl,
     )
-  let environment1 = environment.define(environment, name_token.value, function)
+  let environment1 = environment.define(environment, name, function)
   do_execute(other_statements, environment1)
 }
 
@@ -118,7 +118,7 @@ fn if_stmt(
   case environment.get(environment, ReturnValue) {
     Ok(#(_value, environment)) -> execute(other_statements, environment)
     Error(_) -> {
-      let assert IfStmt(condition, then_branch, else_branch) = if_statement
+      let assert IfStmt(condition, then_branch, else_branch, ..) = if_statement
       evaluate(condition, environment)
       |> then(fn(result) {
         let #(value, new_environment) = result
@@ -211,7 +211,7 @@ fn return_stmt(
 }
 
 fn variable_declaration(
-  name_token: Token,
+  name: LoxValue,
   initializer: Expr,
   statements: List(Stmt),
   environment: Environment,
@@ -219,7 +219,7 @@ fn variable_declaration(
   evaluate(initializer, environment)
   |> then(fn(result) {
     let #(value, environment1) = result
-    let environment2 = environment.define(environment1, name_token.value, value)
+    let environment2 = environment.define(environment1, name, value)
     do_execute(statements, environment2)
   })
 }
@@ -263,8 +263,8 @@ fn evaluate(
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
   case expression {
-    Assign(name: name_token, value: expr) ->
-      evaluate_assignment(name_token, expr, environment)
+    Assign(name: name, value: expr, ..) ->
+      evaluate_assignment(name, expr, environment)
     Binary(operator, left, right, ..) ->
       evaluate_binary(operator, left, right, environment)
     Call(..) -> evaluate_call(expression, environment)
@@ -273,26 +273,26 @@ fn evaluate(
     Logical(operator, left, right, ..) ->
       evaluate_logical(operator, left, right, environment)
     Unary(operator, right, ..) -> evaluate_unary(operator, right, environment)
-    Variable(name_token) -> environment.get(environment, name_token.value)
+    Variable(name, ..) -> environment.get(environment, name)
     _ -> Error(RuntimeError(message: "unexpected expression found."))
   }
 }
 
 fn evaluate_assignment(
-  name_token: Token,
+  name: LoxValue,
   expression: Expr,
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
   evaluate(expression, environment)
-  |> then(fn(result) { do_assignment(name_token, result) })
+  |> then(fn(result) { do_assignment(name, result) })
 }
 
 fn do_assignment(
-  name_token: Token,
+  name: LoxValue,
   result: #(LoxValue, Environment),
 ) -> LoxResult(#(LoxValue, Environment)) {
   let #(value, environment) = result
-  environment.assign(environment, name_token, value)
+  environment.assign(environment, name, value)
   |> then(fn(new_environment) { Ok(#(value, new_environment)) })
 }
 
@@ -411,7 +411,7 @@ fn evaluate_call(
   call_expr: Expr,
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
-  let assert Call(callee, _paren, arguments) = call_expr
+  let assert Call(callee, arguments, ..) = call_expr
   evaluate(callee, environment)
   |> then(fn(result) {
     let #(callee_value, environment1) = result
@@ -467,7 +467,7 @@ fn call_function(
 }
 
 fn do_call_function(
-  params: List(Token),
+  params: List(LoxValue),
   arguments: List(LoxValue),
   body: List(Stmt),
   environment: Environment,
@@ -481,7 +481,7 @@ fn do_call_function(
       with: fn(current_env, param_arg_pair) {
         environment.define(
           current_env,
-          pair.first(param_arg_pair).value,
+          pair.first(param_arg_pair),
           pair.second(param_arg_pair),
         )
       },

@@ -3,6 +3,7 @@
 //// hopefully, a list of tokens for that program.
 
 import gleam/float
+import gleam/int
 import gleam/list
 import gleam/regex
 import gleam/result
@@ -17,13 +18,16 @@ import lox_gleam/types.{
 }
 
 pub fn scan(source: String) -> LoxResult(List(Token)) {
-  result.try(do_scan(source, [], 1), fn(tokens) { list.reverse(tokens) })
+  result.map(do_scan(source, [], "1"), fn(tokens) { list.reverse(tokens) })
 }
 
 fn do_scan(
   source: String,
   tokens: List(Token),
-  line: Int,
+  // The only purpose of hauling these line numbers around is for error
+  // reporting, which happens in strings. So it's easier to keep them
+  // as strings and convert both ways when arithmetic is needed.
+  line: String,
 ) -> LoxResult(List(Token)) {
   case source == "" {
     // Add EOF if we're done
@@ -32,7 +36,7 @@ fn do_scan(
   }
 }
 
-fn end_scan(tokens: List(Token), line: Int) -> LoxResult(List(Token)) {
+fn end_scan(tokens: List(Token), line: String) -> LoxResult(List(Token)) {
   let token = Token(token_type: Eof, value: LoxNil, line: line)
   Ok([token, ..tokens])
 }
@@ -40,13 +44,13 @@ fn end_scan(tokens: List(Token), line: Int) -> LoxResult(List(Token)) {
 fn scan_tokens(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   case char {
     // Easy one-character tokens
     "(" | ")" | "{" | "}" | "," | "." | "+" | "-" | ";" | "*" ->
-      add_simple_token(new_source, tokens, line, char)
+      add_simple_token(new_source, char, tokens, line)
 
     // Chars that might have equals after them
     "!" | "=" | "<" | ">" -> maybe_equals(new_source, char, tokens, line)
@@ -54,7 +58,7 @@ fn scan_tokens(
     // Slashes, comments and whitespace
     "/" -> maybe_comment(new_source, tokens, line)
     " " | "\r" | "\t" -> do_scan(new_source, tokens, line)
-    "\n" -> do_scan(new_source, tokens, line + 1)
+    "\n" -> do_scan(new_source, tokens, increment_line(line))
 
     // Strings
     "\"" -> add_string(new_source, tokens, line)
@@ -64,9 +68,7 @@ fn scan_tokens(
         True, False -> add_number(source, tokens, line)
         False, True -> add_text_based(source, tokens, line)
         False, False ->
-          Error(ScanError(
-            "unexpected character on line " <> string.inspect(line) <> ".",
-          ))
+          Error(ScanError("unexpected character on line " <> line <> "."))
       }
     }
   }
@@ -74,9 +76,9 @@ fn scan_tokens(
 
 fn add_simple_token(
   source: String,
-  tokens: List(Token),
-  line: Int,
   text: String,
+  tokens: List(Token),
+  line: String,
 ) -> LoxResult(List(Token)) {
   let token =
     Token(token_type: text_to_token_type(text), value: LoxNil, line: line)
@@ -128,51 +130,48 @@ fn maybe_equals(
   source: String,
   char: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   source
   |> string.pop_grapheme()
+  |> result.replace_error(ScanError(
+    message: "unexpected end of file (line " <> line <> ").",
+  ))
   |> result.then(fn(result) {
     case result {
       #("=", new_source) ->
-        add_simple_token(new_source, tokens, line, char <> "=")
-      _ -> add_simple_token(source, tokens, line, char)
+        add_simple_token(new_source, char <> "=", tokens, line)
+      _ -> add_simple_token(source, char, tokens, line)
     }
-  })
-  |> result.map_error(fn(_) {
-    Error(ScanError(
-      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
-    ))
   })
 }
 
 fn maybe_comment(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   source
   |> string.first()
+  |> result.replace_error(ScanError(
+    message: "unexpected end of file (line " <> line <> ").",
+  ))
   |> result.then(fn(result) {
-    case string.first(source) {
+    case result {
       "/" -> scan_comment(source, tokens, line)
-      _ -> add_simple_token(source, tokens, line, "/")
+      _ -> add_simple_token(source, "/", tokens, line)
     }
-  })
-  |> result.map_error(fn(_) {
-    Error(ScanError(
-      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
-    ))
   })
 }
 
 fn scan_comment(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   case string.split_once(source, "\n") {
-    Ok(#(_comment, new_source)) -> do_scan(new_source, tokens, line + 1)
+    Ok(#(_comment, new_source)) ->
+      do_scan(new_source, tokens, increment_line(line))
     // This means a comment in the last line of the file
     Error(_reason) -> do_scan("", tokens, line)
   }
@@ -181,25 +180,23 @@ fn scan_comment(
 fn add_string(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   source
   |> string.split_once("\"")
+  |> result.replace_error(ScanError(
+    message: "unterminated string on line " <> line <> ".",
+  ))
   |> result.then(fn(result) {
     let #(literal, new_source) = result
     do_add_string(new_source, tokens, line, literal)
-  })
-  |> result.map_error(fn(_) {
-    Error(ScanError(
-      message: "unterminated string on line " <> string.inspect(line) <> ".",
-    ))
   })
 }
 
 fn do_add_string(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
   text: String,
 ) -> LoxResult(List(Token)) {
   let newlines = case string.contains(text, "\n") {
@@ -207,7 +204,7 @@ fn do_add_string(
     False -> 0
   }
   let token = Token(token_type: TokenString, value: LoxString(text), line: line)
-  do_scan(source, [token, ..tokens], line + newlines)
+  do_scan(source, [token, ..tokens], increase_line(line, newlines))
 }
 
 fn count_newlines(text: String) -> Int {
@@ -230,9 +227,9 @@ fn is_alpha(char: String) -> Bool {
 fn add_number(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
-  number_text("", source, False)
+  number_text("", source, line, False)
   |> result.then(fn(result) {
     let #(text, new_source) = result
     let assert Ok(value) = float.parse(text)
@@ -245,6 +242,7 @@ fn add_number(
 fn number_text(
   current: String,
   source: String,
+  line: String,
   decimal_found: Bool,
 ) -> LoxResult(#(String, String)) {
   let result = string.pop_grapheme(source)
@@ -252,12 +250,13 @@ fn number_text(
     // Trying to have a number with two decimal points
     Ok(#(".", _)), True ->
       Error(ScanError(
-        "on line " <> string.inspect(line) <> "; a number can only have one decimal point.",
+        "on line " <> line <> "; a number can only have one decimal point.",
       ))
     // Process the decimal and the first character after it
-    Ok(#(".", new_source)), False -> handle_decimal(current, new_source)
+    Ok(#(".", new_source)), False -> handle_decimal(current, new_source, line)
     // See what the new character is - recurse or return
-    Ok(#(char, _)), _ -> handle_digit(current, char, source, decimal_found)
+    Ok(#(char, _)), _ ->
+      handle_digit(current, char, source, line, decimal_found)
     // A float at the end of the source
     Error(_), True -> Ok(#(current, source))
     // An integer at the end of the source
@@ -268,6 +267,7 @@ fn number_text(
 fn handle_decimal(
   current: String,
   source: String,
+  line: String,
 ) -> LoxResult(#(String, String)) {
   let assert Ok(#(char, new_source)) = string.pop_grapheme(source)
   // What follows a decimal point must be a digit
@@ -276,11 +276,11 @@ fn handle_decimal(
     // showing we're past the decimal.
     True -> {
       let new_current = current <> "." <> char
-      number_text(new_current, new_source, True)
+      number_text(new_current, new_source, line, True)
     }
     False ->
       Error(ScanError(
-        "on line " <> string.inspect(line) <> "; a decimal point must be followed by a digit.",
+        "on line " <> line <> "; a decimal point must be followed by a digit.",
       ))
   }
 }
@@ -289,12 +289,18 @@ fn handle_digit(
   current: String,
   char: String,
   source: String,
+  line: String,
   decimal_found: Bool,
 ) -> LoxResult(#(String, String)) {
   case is_digit(char), decimal_found {
     // If the char is a digit, we append it to the number and recurse.
     True, _ ->
-      number_text(current <> char, string.drop_left(source, 1), decimal_found)
+      number_text(
+        current <> char,
+        string.drop_left(source, 1),
+        line,
+        decimal_found,
+      )
     // Otherwise, we're done!
     False, True -> Ok(#(current, source))
     False, False -> Ok(#(current <> ".0", source))
@@ -310,7 +316,7 @@ fn is_alphanumeric(char: String) -> Bool {
 fn add_text_based(
   source: String,
   tokens: List(Token),
-  line: Int,
+  line: String,
 ) -> LoxResult(List(Token)) {
   identifier_text("", source, line)
   |> result.then(fn(result) {
@@ -328,24 +334,36 @@ fn add_text_based(
 fn identifier_text(
   current: String,
   source: String,
-  line: Int,
+  line: String,
 ) -> LoxResult(#(String, String)) {
   source
   |> string.pop_grapheme()
+  |> result.replace_error(ScanError(
+    message: "unexpected end of file (line " <> line <> ").",
+  ))
   |> result.then(fn(result) {
     let #(char, new_source) = result
     case is_alphanumeric(char), new_source {
       // We're done scanning the lexeme
-      False, _ -> #(current, source)
+      False, _ -> Ok(#(current, source))
       // We're at the end of the source code
-      True, "" -> #(current <> char, "")
+      True, "" -> Ok(#(current <> char, ""))
       // Not done yet, so we recurse
       True, _ -> identifier_text(current <> char, new_source, line)
     }
   })
-  |> result.map_error(fn(_) {
-    Error(ScanError(
-      message: "unexpected end of file (line " <> string.inspect(line) <> ").",
-    ))
-  })
+}
+
+fn increment_line(line: String) -> String {
+  increase_line(line, 1)
+}
+
+fn increase_line(line: String, amount: Int) -> String {
+  line
+  |> int.parse()
+  // Parses as a big negative number if parsing fails, so any
+  // use of the number is obviously wrong
+  |> result.unwrap(-1_000_000_000)
+  |> int.add(amount)
+  |> int.to_string()
 }
