@@ -8,7 +8,7 @@ import gleam/result
 import gleam/string
 import lox_gleam/error
 import lox_gleam/types.{
-  Environment, Global, Local, LoxString, LoxValue, NativeFunction, Table, Token,
+  Environment, Global, Local, LoxString, LoxValue, NativeFunction, Table,
 }
 
 pub fn create(parent: option.Option(Environment)) -> Environment {
@@ -55,22 +55,20 @@ pub fn define_at_global(
 
 pub fn assign(
   environment: Environment,
-  name_token: Token,
+  name: LoxValue,
   value: LoxValue,
 ) -> error.LoxResult(Environment) {
   let #(is_global, table) = is_global(environment)
-  case is_global, map.has_key(table, name_token.value) {
-    True, True ->
-      Ok(Global(map.insert(into: table, for: name_token.value, insert: value)))
+  case is_global, map.has_key(table, name) {
+    True, True -> Ok(Global(map.insert(into: table, for: name, insert: value)))
     False, True -> {
-      let new_table =
-        map.insert(into: table, for: name_token.value, insert: value)
+      let new_table = map.insert(into: table, for: name, insert: value)
       let assert Local(parent: parent, ..) = environment
       Ok(Local(parent: parent, table: new_table))
     }
     False, False -> {
       let assert Local(parent: parent, ..) = environment
-      assign(parent, name_token, value)
+      assign(parent, name, value)
       |> result.then(fn(new_parent) {
         let assert Local(table: table, ..) = environment
         Ok(Local(parent: new_parent, table: table))
@@ -78,7 +76,7 @@ pub fn assign(
     }
     True, False ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> string.inspect(name_token.value) <> "'.",
+        message: "undefined variable '" <> string.inspect(name) <> "'.",
       ))
   }
 }

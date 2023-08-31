@@ -12,25 +12,35 @@ pub type Environment {
 }
 
 pub type Stmt {
-  Block(statements: List(Stmt))
-  ExprStmt(expression: Expr)
-  FunDecl(name: Token, params: List(Token), body: List(Stmt))
-  IfStmt(condition: Expr, then_branch: Stmt, else_branch: option.Option(Stmt))
-  PrintStmt(expression: Expr)
-  ReturnStmt(value: Expr)
-  VarDecl(name: Token, initializer: Expr)
-  WhileStmt(condition: Expr, body: Stmt)
+  Block(line: String, statements: List(Stmt))
+  ExprStmt(line: String, expression: Expr)
+  FunDecl(
+    line: String,
+    name: LoxValue,
+    params: List(LoxValue),
+    body: List(Stmt),
+  )
+  IfStmt(
+    line: String,
+    condition: Expr,
+    then_branch: Stmt,
+    else_branch: option.Option(Stmt),
+  )
+  PrintStmt(line: String, expression: Expr)
+  ReturnStmt(line: String, value: Expr)
+  VarDecl(line: String, name: LoxValue, initializer: Expr)
+  WhileStmt(line: String, condition: Expr, body: Stmt)
 }
 
 pub type Expr {
-  Assign(name: Token, value: Expr)
-  Binary(operator: TokenType, left: Expr, right: Expr, line: Int)
-  Call(callee: Expr, paren: Token, arguments: List(Expr))
-  Grouping(expression: Expr, line: Int)
-  Literal(value: LoxValue, line: Int)
-  Logical(operator: TokenType, left: Expr, right: Expr, line: Int)
-  Unary(operator: TokenType, right: Expr, line: Int)
-  Variable(name: Token)
+  Assign(line: String, name: LoxValue, value: Expr)
+  Binary(line: String, operator: TokenType, left: Expr, right: Expr)
+  Call(line: String, callee: Expr, arguments: List(Expr))
+  Grouping(line: String, expression: Expr)
+  Literal(line: String, value: LoxValue)
+  Logical(line: String, operator: TokenType, left: Expr, right: Expr)
+  Unary(line: String, operator: TokenType, right: Expr)
+  Variable(line: String, name: LoxValue)
 }
 
 pub type LoxValue {
@@ -49,7 +59,7 @@ pub type LoxValue {
 }
 
 pub type Token {
-  Token(token_type: TokenType, value: LoxValue, line: Int)
+  Token(line: String, token_type: TokenType, value: LoxValue)
 }
 
 pub type TokenType {
