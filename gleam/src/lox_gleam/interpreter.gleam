@@ -103,7 +103,7 @@ fn fun_declaration(
   let function =
     LoxFunction(
       arity: list.length(params),
-      to_string: "<fn " <> string.inspect(name) <> ">",
+      to_string: "<fn " <> types.read_value(name) <> ">",
       closure: environment,
       declaration: fun_decl,
     )

@@ -4,11 +4,11 @@ import gleam/map
 import gleam/option
 
 pub type Table =
-  map.Map(LoxValue, LoxValue)
+  map.Map(String, LoxValue)
 
 pub type Environment {
   Global(table: Table)
-  Local(parent: Environment, table: Table)
+  Local(table: Table, parent: Environment)
 }
 
 pub type Stmt {
@@ -56,6 +56,14 @@ pub type LoxValue {
   LoxString(String)
   NativeFunction(arity: Int, name: String, to_string: String)
   ReturnValue
+}
+
+pub fn read_value(value: LoxValue) -> String {
+  case value {
+    LoxString(name) -> name
+    ReturnValue -> "ReturnValue"
+    _ -> "Unreachable"
+  }
 }
 
 pub type Token {

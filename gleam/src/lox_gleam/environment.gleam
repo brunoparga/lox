@@ -5,7 +5,6 @@
 import gleam/map
 import gleam/option
 import gleam/result
-import gleam/string
 import lox_gleam/error
 import lox_gleam/types.{
   Environment, Global, Local, LoxString, LoxValue, NativeFunction, Table,
@@ -27,9 +26,10 @@ pub fn define(
 ) -> Environment {
   case environment {
     Global(table: table) ->
-      Global(map.insert(into: table, for: name, insert: value))
+      Global(map.insert(into: table, for: types.read_value(name), insert: value))
     Local(table: table, parent: parent) -> {
-      let new_table = map.insert(into: table, for: name, insert: value)
+      let new_table =
+        map.insert(into: table, for: types.read_value(name), insert: value)
       Local(parent: parent, table: new_table)
     }
   }
@@ -59,10 +59,16 @@ pub fn assign(
   value: LoxValue,
 ) -> error.LoxResult(Environment) {
   let #(is_global, table) = is_global(environment)
-  case is_global, map.has_key(table, name) {
-    True, True -> Ok(Global(map.insert(into: table, for: name, insert: value)))
+  case is_global, map.has_key(table, types.read_value(name)) {
+    True, True ->
+      Ok(Global(map.insert(
+        into: table,
+        for: types.read_value(name),
+        insert: value,
+      )))
     False, True -> {
-      let new_table = map.insert(into: table, for: name, insert: value)
+      let new_table =
+        map.insert(into: table, for: types.read_value(name), insert: value)
       let assert Local(parent: parent, ..) = environment
       Ok(Local(parent: parent, table: new_table))
     }
@@ -76,7 +82,7 @@ pub fn assign(
     }
     True, False ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> string.inspect(name) <> "'.",
+        message: "undefined variable '" <> types.read_value(name) <> "'.",
       ))
   }
 }
@@ -86,7 +92,7 @@ pub fn get(
   variable: LoxValue,
 ) -> error.LoxResult(#(LoxValue, Environment)) {
   let #(is_global, table) = is_global(environment)
-  case is_global, map.get(table, variable) {
+  case is_global, map.get(table, types.read_value(variable)) {
     _, Ok(value) -> Ok(#(value, environment))
     False, Error(Nil) -> {
       let assert Local(parent: parent, ..) = environment
@@ -99,7 +105,7 @@ pub fn get(
     }
     True, Error(Nil) ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> string.inspect(variable) <> "'.",
+        message: "undefined variable '" <> types.read_value(variable) <> "'.",
       ))
   }
 }
