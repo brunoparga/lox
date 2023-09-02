@@ -423,12 +423,11 @@ fn evaluate_call(
       _ -> Ok(#([], environment1))
     }
     list.fold(arguments, initial_env, evaluate_arguments)
-    |> result.map(fn(args_and_environment) {
+    |> then(fn(args_and_environment) {
       let #(args, env) = args_and_environment
-      #(callee_value, args, env)
+      call_function(callee_value, args, env)
     })
   })
-  |> then(call_function)
 }
 
 fn evaluate_arguments(
@@ -442,9 +441,10 @@ fn evaluate_arguments(
 }
 
 fn call_function(
-  result: #(LoxValue, List(LoxValue), Environment),
+  callee_value: LoxValue,
+  argument_values: List(LoxValue),
+  environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
-  let #(callee_value, argument_values, environment) = result
   let args_length = list.length(argument_values)
   let message = fn(arity) {
     "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
@@ -491,6 +491,9 @@ fn do_call_function(
     )
     |> block(body, _)
 
+  // Write an environment.pop_return_value that already returns this tuple,
+  // and removes the `ReturnValue` entry from the env. We'll return the Ok
+  // of what that new function returns.
   let return_value = case environment.get(block_environment, ReturnValue) {
     Ok(#(value, _env)) -> value
     Error(_) -> LoxNil
