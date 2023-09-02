@@ -415,17 +415,17 @@ fn evaluate_call(
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
   let assert Call(_line, callee, arguments) = call_expr
+  let callee_name = case callee {
+    Variable(name: name, ..) -> name
+    _ -> LoxString("Unreachable")
+  }
   evaluate(callee, environment)
   |> then(fn(result) {
     let #(callee_value, environment1) = result
-    let initial_env = case callee_value {
-      LoxFunction(closure: closure, ..) -> Ok(#([], closure))
-      _ -> Ok(#([], environment1))
-    }
-    list.fold(arguments, initial_env, evaluate_arguments)
+    list.fold(arguments, Ok(#([], environment1)), evaluate_arguments)
     |> then(fn(args_and_environment) {
       let #(args, env) = args_and_environment
-      call_function(callee_value, args, env)
+      call_function(callee_name, callee_value, args, env)
     })
   })
 }
@@ -441,6 +441,7 @@ fn evaluate_arguments(
 }
 
 fn call_function(
+  callee_name: LoxValue,
   callee_value: LoxValue,
   argument_values: List(LoxValue),
   environment: Environment,
@@ -458,10 +459,39 @@ fn call_function(
         False -> Error(RuntimeError(message: message(arity)))
       }
     }
-    LoxFunction(arity: arity, declaration: declaration, ..) -> {
-      let assert FunDecl(params: params, body: body, ..) = declaration
+    LoxFunction(
+      arity: arity,
+      declaration: declaration,
+      closure: closure,
+      to_string: to_string,
+    ) -> {
+      let assert FunDecl(params: params, body: body, ..) =
+        declaration
       case args_length == arity {
-        True -> do_call_function(params, argument_values, body, environment)
+        True -> {
+          let assert Ok(#(return_value, new_closure, new_environment)) =
+            do_call_function(
+              params,
+              argument_values,
+              body,
+              closure,
+              environment,
+            )
+          let updated_closure_fun =
+            LoxFunction(
+              arity: arity,
+              declaration: declaration,
+              closure: new_closure,
+              to_string: to_string,
+            )
+          let assert Ok(return_environment) =
+            environment.assign(
+              in: new_environment,
+              to: callee_name,
+              new_value: updated_closure_fun,
+            )
+          Ok(#(return_value, return_environment))
+        }
         False -> Error(RuntimeError(message: message(arity)))
       }
     }
@@ -473,9 +503,15 @@ fn do_call_function(
   params: List(LoxValue),
   arguments: List(LoxValue),
   body: List(Stmt),
+  closure: Environment,
   environment: Environment,
-) -> LoxResult(#(LoxValue, Environment)) {
-  let fun_environment = environment.create(Some(environment))
+) -> LoxResult(#(LoxValue, Environment, Environment)) {
+  let fun_environment =
+    closure
+    |> environment.update_parent(environment)
+    |> Some()
+    |> environment.create()
+
   let assert Ok(block_environment) =
     params
     |> list.zip(with: arguments)
@@ -491,14 +527,10 @@ fn do_call_function(
     )
     |> block(body, _)
 
-  // Write an environment.pop_return_value that already returns this tuple,
-  // and removes the `ReturnValue` entry from the env. We'll return the Ok
-  // of what that new function returns.
-  let return_value = case environment.get(block_environment, ReturnValue) {
-    Ok(#(value, _env)) -> value
-    Error(_) -> LoxNil
-  }
-  Ok(#(return_value, environment))
+  let #(return_value, tmp_env) = environment.get_return_value(block_environment)
+  let assert Local(parent: block_parent, ..) = tmp_env
+  let return_environment = environment.update_values(environment, block_parent)
+  Ok(#(return_value, block_parent, return_environment))
 }
 
 fn evaluate_logical(

@@ -25,7 +25,10 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
       "Too many arguments given. Usage: gleam run -- [script]"
     _ -> ""
   }
-  io.println_error(message)
+  case message == "" {
+    True -> Nil
+    False -> io.println_error(message)
+  }
 
   result
 }
