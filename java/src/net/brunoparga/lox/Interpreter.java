@@ -40,6 +40,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     stmt.accept(this);
   }
 
+  // Stub
+  void resolve(Expr expr, int depth) {
+    return;
+  }
+
   void executeBlock(List<Stmt> statements, Environment environment) {
     Environment previous = this.environment;
     try {
