@@ -1,34 +1,26 @@
-//// Define all the possible error types in the application and a
-//// function to report them.
+//// Define all the possible error types in the application and a function
+//// to print them.
 
-import gleam/io
+import gleam/dynamic
+import lox_gleam/token.{Token}
+import lox_gleam/ast_types.{Expr, Stmt}
 
 pub type LoxError {
   ErlangError(message: String)
-  ParseError(message: String)
-  RuntimeError(message: String)
-  ScanError(message: String)
+  NotImplementedError
+  ParseError(
+    message: String,
+    line: Int,
+    tokens: List(Token),
+    exprs: List(Expr),
+    stmts: List(Stmt),
+  )
+  RuntimeError(message: String, values: List(dynamic.Dynamic))
+  ScanError(message: String, line: Int)
+  ScanInvalidNumberError
+  ScanUnexpectedEOFError
   TooManyArgumentsError
 }
 
 pub type LoxResult(t) =
   Result(t, LoxError)
-
-pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
-  let message = case result {
-    Error(ErlangError(message)) ->
-      "Erlang error when opening file: " <> message <> "."
-    Error(ParseError(message)) -> message
-    Error(RuntimeError(message)) -> "Runtime error: " <> message
-    Error(ScanError(message)) -> "Scan error on line X: " <> message
-    Error(TooManyArgumentsError) ->
-      "Too many arguments given. Usage: gleam run -- [script]"
-    _ -> ""
-  }
-  case message == "" {
-    True -> Nil
-    False -> io.println_error(message)
-  }
-
-  result
-}
