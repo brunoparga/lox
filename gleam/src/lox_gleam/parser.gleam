@@ -317,7 +317,7 @@ fn build_params(
 ) -> LoxResult(#(List(LoxValue), List(Token))) {
   let [param, comma_or_paren, ..new_tokens] = tokens
   case param.token_type, comma_or_paren.token_type {
-    Identifier, RightParen -> Ok(#([param.value, ..params], new_tokens))
+    Identifier, RightParen -> Ok(#(list.reverse([param.value, ..params]), new_tokens))
     Identifier, Comma -> build_params([param.value, ..params], new_tokens)
     Identifier, _ ->
       Error(ParseError("Expect ')' after parameters.", line: comma_or_paren.line, token: comma_or_paren.value))
