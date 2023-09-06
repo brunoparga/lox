@@ -29,8 +29,9 @@ pub fn parse(tokens: LoxResult(List(Token))) -> LoxResult(List(Stmt)) {
     case result {
       #(statements, []) | #(statements, [Token(token_type: Eof, ..)]) ->
         Ok(list.reverse(statements))
-      #(_statements, [Token(..)]) ->
-        Error(ParseError(message: "unexpected end of tokens."))
+      #(_statements, [Token(line: line, ..)]) ->
+        Error(ParseError(message: "unexpected end of tokens.",
+            line: line))
       #(statements, new_tokens) -> {
         // This handles the weird case of top-level blocks.
         use new_statements <- then(parse(Ok(new_tokens)))
@@ -54,6 +55,7 @@ fn declaration(
         message: "you might be missing a semicolon on line " <> string.inspect(
           line,
         ) <> ".",
+        line: line,
       ))
     Ok(#(statements, tokens)) -> statement(statements, tokens)
     Error(error) -> Error(error)
@@ -105,7 +107,7 @@ fn block(
   case first_token.token_type {
     Eof ->
       Error(ParseError(
-        message: "unexpected end of file while parsing block on line " <> line <> ".",
+        message: "unexpected end of file while parsing block on line " <> line <> ".",line: line
       ))
     _ -> {
       declaration(Ok(#([], tokens)))
@@ -129,7 +131,8 @@ fn consume(
     True -> Ok(tokens1)
     False ->
       Error(ParseError(
-        message: "line " <> string.inspect(first_token.line) <> ": " <> message,
+        message: "line " <> first_token.line <> ": " <> message,
+        line: first_token.line,
       ))
   }
 }
@@ -288,8 +291,8 @@ fn function_declaration(
     // Yes parameters
     Identifier, LeftParen, _ -> build_params([], [next_token, ..tokens1])
     Identifier, _, _ ->
-      Error(ParseError("Expect '(' after " <> kind <> " name."))
-    _, _, _ -> Error(ParseError("Expect " <> kind <> " name."))
+      Error(ParseError("Expect '(' after " <> kind <> " name.", line: name_token.line))
+    _, _, _ -> Error(ParseError("Expect " <> kind <> " name.", line: name_token.line))
   }
   |> then(fn(result) {
     let #(parameters, tokens2) = result
@@ -308,8 +311,9 @@ fn build_params(
   case param.token_type, comma_or_paren.token_type {
     Identifier, RightParen -> Ok(#([param.value, ..params], new_tokens))
     Identifier, Comma -> build_params([param.value, ..params], new_tokens)
-    Identifier, _ -> Error(ParseError("Expect ')' after parameters."))
-    _, _ -> Error(ParseError("Expect parameter name."))
+    Identifier, _ ->
+      Error(ParseError("Expect ')' after parameters.", line: param.line))
+    _, _ -> Error(ParseError("Expect parameter name.", line: param.line))
   }
 }
 
@@ -320,7 +324,7 @@ fn build_fun_declaration(
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
   case list.length(parameters) >= 255 {
-    True -> Error(ParseError("Can't have more than 255 parameters."))
+    True -> Error(ParseError("Can't have more than 255 parameters.",line: name_token.line))
     False ->
       statements
       |> block(tokens)
@@ -464,13 +468,13 @@ fn var_declaration(
         }
         _ ->
           Error(ParseError(
-            message: "the variable declaration on line " <> line <> " must be followed by ';' or an assignment.",
+            message: "the variable declaration on line " <> line <> " must be followed by ';' or an assignment.",line: line
           ))
       }
     }
     Token(line: line, ..) ->
       Error(ParseError(
-        message: "expect a variable name after the 'var' keyword on line " <> line <> ".",
+        message: "expect a variable name after the 'var' keyword on line " <> line <> ".",line: line
       ))
   }
 }
@@ -526,7 +530,7 @@ fn do_while_statement(
         declaration(Ok(#([while_stmt, ..new_statements], new_tokens)))
       }
       _ ->
-        Error(ParseError(message: "expected statement as 'while' loop body."))
+        Error(ParseError(message: "expected statement as 'while' loop body.", line: condition.line))
     }
   })
 }
@@ -545,6 +549,7 @@ fn assignment(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
           message: "unexpected end of tokens when assigning variable" <> string.inspect(
             name_expr,
           ) <> ".",
+          line: name_expr.line
         ))
       #(name_expr, new_tokens) -> do_assignment(name_expr, new_tokens)
     }
@@ -570,7 +575,7 @@ fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
     case name_expr {
       Variable(name: name, line: line) ->
         Ok(#(Assign(name: name, value: value_expr, line: line), new_tokens))
-      _ -> Error(ParseError(message: "invalid assignment target."))
+      _ -> Error(ParseError(message: "invalid assignment target.",line: value_expr.line))
     }
   })
 }
@@ -649,10 +654,10 @@ fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
     _ -> build_arguments([], tokens)
   }
   |> then(fn(result) {
-    let #(arguments, _closing_paren, [left_paren, ..new_tokens]) = result
+    let #(arguments, closing_paren, [left_paren, ..new_tokens]) = result
     case list.length(arguments) {
       n if n >= 255 ->
-        Error(ParseError(message: "Can't have more than 255 arguments."))
+        Error(ParseError(message: "Can't have more than 255 arguments.",line: closing_paren.line))
       _ -> {
         let call_expr =
           Call(line: callee.line, callee: callee, arguments: arguments)
@@ -678,7 +683,7 @@ fn build_arguments(
     case comma_or_paren.token_type {
       RightParen -> Ok(#([argument, ..arguments], comma_or_paren, new_tokens))
       Comma -> build_arguments([argument, ..arguments], new_tokens)
-      _ -> Error(ParseError(message: "Expect ')' after arguments."))
+      _ -> Error(ParseError(message: "Expect ')' after arguments.", line: comma_or_paren.line))
     }
   })
 }
@@ -704,7 +709,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
       ))
     LeftParen -> do_grouping(first_token, other_tokens)
     Eof -> Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
-    _ -> Error(ParseError(message: "unexpected token."))
+    _ -> Error(ParseError(message: "unexpected token.", line: first_token.line))
   }
 }
 

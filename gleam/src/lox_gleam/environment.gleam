@@ -12,6 +12,7 @@ import lox_gleam/types.{
 }
 
 pub fn assign(
+  at line: String,
   in environment: Environment,
   to name: LoxValue,
   new_value value: LoxValue,
@@ -32,7 +33,7 @@ pub fn assign(
     }
     False, False -> {
       let assert Local(parent: parent, ..) = environment
-      assign(parent, name, value)
+      assign(line, parent, name, value)
       |> result.then(fn(new_parent) {
         let assert Local(table: table, ..) = environment
         Ok(Local(parent: new_parent, table: table))
@@ -41,6 +42,7 @@ pub fn assign(
     True, False ->
       Error(error.RuntimeError(
         message: "undefined variable '" <> types.read_value(name) <> "'.",
+        line: line,
       ))
   }
 }
@@ -89,6 +91,7 @@ pub fn define_at_global(
 }
 
 pub fn get(
+  line: String,
   environment: Environment,
   variable: LoxValue,
 ) -> error.LoxResult(#(LoxValue, Environment)) {
@@ -97,7 +100,7 @@ pub fn get(
     _, Ok(value) -> Ok(#(value, environment))
     False, Error(Nil) -> {
       let assert Local(parent: parent, ..) = environment
-      get(parent, variable)
+      get(line, parent, variable)
       |> result.then(fn(value_and_env) {
         // We don't care where the variable was found
         let #(value, _irrelevant_env) = value_and_env
@@ -107,12 +110,16 @@ pub fn get(
     True, Error(Nil) ->
       Error(error.RuntimeError(
         message: "undefined variable '" <> types.read_value(variable) <> "'.",
+        line: line,
       ))
   }
 }
 
-pub fn get_return_value(environment: Environment) -> #(LoxValue, Environment) {
-  let return_value = case get(environment, ReturnValue) {
+pub fn get_return_value(
+  line: String,
+  environment: Environment,
+) -> #(LoxValue, Environment) {
+  let return_value = case get(line, environment, ReturnValue) {
     Ok(#(value, _env)) -> value
     Error(_) -> LoxNil
   }

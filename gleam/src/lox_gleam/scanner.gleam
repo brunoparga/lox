@@ -68,7 +68,10 @@ fn scan_tokens(
         True, False -> add_number(source, tokens, line)
         False, True -> add_text_based(source, tokens, line)
         False, False ->
-          Error(ScanError("unexpected character on line " <> line <> "."))
+          Error(ScanError(
+            "unexpected character on line " <> line <> ".",
+            line: line,
+          ))
       }
     }
   }
@@ -136,6 +139,7 @@ fn maybe_equals(
   |> string.pop_grapheme()
   |> result.replace_error(ScanError(
     message: "unexpected end of file (line " <> line <> ").",
+    line: line,
   ))
   |> result.then(fn(result) {
     case result {
@@ -155,6 +159,7 @@ fn maybe_comment(
   |> string.first()
   |> result.replace_error(ScanError(
     message: "unexpected end of file (line " <> line <> ").",
+    line: line,
   ))
   |> result.then(fn(result) {
     case result {
@@ -186,6 +191,7 @@ fn add_string(
   |> string.split_once("\"")
   |> result.replace_error(ScanError(
     message: "unterminated string on line " <> line <> ".",
+    line: line,
   ))
   |> result.then(fn(result) {
     let #(literal, new_source) = result
@@ -250,7 +256,7 @@ fn number_text(
     // Trying to have a number with two decimal points
     Ok(#(".", _)), True ->
       Error(ScanError(
-        "on line " <> line <> "; a number can only have one decimal point.",
+        "on line " <> line <> "; a number can only have one decimal point.",line: line
       ))
     // Process the decimal and the first character after it
     Ok(#(".", new_source)), False -> handle_decimal(current, new_source, line)
@@ -280,7 +286,7 @@ fn handle_decimal(
     }
     False ->
       Error(ScanError(
-        "on line " <> line <> "; a decimal point must be followed by a digit.",
+        "on line " <> line <> "; a decimal point must be followed by a digit.",line: line
       ))
   }
 }
@@ -340,6 +346,7 @@ fn identifier_text(
   |> string.pop_grapheme()
   |> result.replace_error(ScanError(
     message: "unexpected end of file (line " <> line <> ").",
+    line: line,
   ))
   |> result.then(fn(result) {
     let #(char, new_source) = result

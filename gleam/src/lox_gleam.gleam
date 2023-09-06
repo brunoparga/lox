@@ -22,7 +22,11 @@ pub fn main() -> error.LoxResult(types.Environment) {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
-    _ -> Error(error.TooManyArgumentsError("Too many arguments given. Usage: gleam run -- [script]"))
+    _ ->
+      Error(error.TooManyArgumentsError(
+        "Too many arguments given. Usage: gleam run -- [script]",
+        "0",
+      ))
   }
 }
 
@@ -53,7 +57,7 @@ fn do_run_prompt(environment: types.Environment) -> types.Environment {
 fn run_file(filename: String) -> error.LoxResult(types.Environment) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents, environment.create(option.None))
-    Error(error) -> Error(error.ErlangError(message: string.inspect(error)))
+    Error(error) -> Error(error.ErlangError(message: string.inspect(error), line: "0"))
   }
 }
 

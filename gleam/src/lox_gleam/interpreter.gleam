@@ -90,7 +90,10 @@ fn block(
   })
   |> result.map_error(fn(_) {
     let [stmt, ..] = block_statements
-    RuntimeError("something went wrong with block on line " <> stmt.line)
+    RuntimeError(
+      "something went wrong with block on line " <> stmt.line,
+      line: stmt.line,
+    )
   })
 }
 
@@ -116,7 +119,7 @@ fn if_stmt(
   other_statements: List(Stmt),
   environment: Environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  case environment.get(environment, ReturnValue) {
+  case environment.get(if_statement.line, environment, ReturnValue) {
     Ok(#(_value, environment)) -> execute(other_statements, environment)
     Error(_) -> {
       let assert IfStmt(_line, condition, then_branch, else_branch) =
@@ -248,7 +251,7 @@ fn do_while_stmt(
   other_statements: List(Stmt),
   environment: Environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  case environment.get(environment, ReturnValue) {
+  case environment.get(condition.line, environment, ReturnValue) {
     Ok(#(_value, environment)) -> execute(other_statements, environment)
     Error(_) -> {
       execute([body], environment)
@@ -276,8 +279,7 @@ fn evaluate(
       evaluate_logical(operator, left, right, environment)
     Unary(operator: operator, right: right, ..) ->
       evaluate_unary(operator, right, environment)
-    Variable(name: name, ..) -> environment.get(environment, name)
-    _ -> Error(RuntimeError(message: "unexpected expression found."))
+    Variable(name: name, line: line) -> environment.get(line, environment, name)
   }
 }
 
@@ -287,15 +289,16 @@ fn evaluate_assignment(
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
   evaluate(expression, environment)
-  |> then(fn(result) { do_assignment(name, result) })
+  |> then(fn(result) { do_assignment(expression.line, name, result) })
 }
 
 fn do_assignment(
+  line: String,
   name: LoxValue,
   result: #(LoxValue, Environment),
 ) -> LoxResult(#(LoxValue, Environment)) {
   let #(value, environment) = result
-  environment.assign(environment, name, value)
+  environment.assign(line, environment, name, value)
   |> then(fn(new_environment) { Ok(#(value, new_environment)) })
 }
 
@@ -327,6 +330,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -337,6 +341,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -347,6 +352,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -357,6 +363,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -367,6 +374,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -379,6 +387,7 @@ fn evaluate_binary(
         _, _ ->
           Error(RuntimeError(
             message: "binary operator Plus takes either two numbers or two strings.",
+            line: left_expr.line,
           ))
       }
     }
@@ -390,6 +399,7 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
@@ -400,12 +410,14 @@ fn evaluate_binary(
         None ->
           Error(RuntimeError(
             message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            line: left_expr.line,
           ))
       }
     }
     _ ->
       Error(RuntimeError(
         message: "unrecognized token " <> string.inspect(operator) <> " in binary expression.",
+        line: left_expr.line,
       ))
   }
 }
@@ -457,7 +469,7 @@ fn call_function(
     NativeFunction(arity: arity, ..) -> {
       case args_length == arity {
         True -> clock(environment)
-        False -> Error(RuntimeError(message: message(arity)))
+        False -> Error(RuntimeError(message: message(arity), line: line))
       }
     }
     LoxFunction(
@@ -466,12 +478,12 @@ fn call_function(
       closure: closure,
       to_string: to_string,
     ) -> {
-      let assert FunDecl(params: params, body: body, ..) =
-        declaration
+      let assert FunDecl(params: params, body: body, ..) = declaration
       case args_length == arity {
         True -> {
           let assert Ok(#(return_value, new_closure, new_environment)) =
             do_call_function(
+              line,
               params,
               argument_values,
               body,
@@ -487,20 +499,26 @@ fn call_function(
             )
           let assert Ok(return_environment) =
             environment.assign(
+              at: line,
               in: new_environment,
               to: callee_name,
               new_value: updated_closure_fun,
             )
           Ok(#(return_value, return_environment))
         }
-        False -> Error(error.SpecialError(message: message(arity), line: line))
+        False -> Error(RuntimeError(message: message(arity), line: line))
       }
     }
-    _ -> Error(RuntimeError(message: "Can only call functions and classes."))
+    _ ->
+      Error(RuntimeError(
+        message: "Can only call functions and classes.",
+        line: line,
+      ))
   }
 }
 
 fn do_call_function(
+  line: String,
   params: List(LoxValue),
   arguments: List(LoxValue),
   body: List(Stmt),
@@ -528,7 +546,8 @@ fn do_call_function(
     )
     |> block(body, _)
 
-  let #(return_value, tmp_env) = environment.get_return_value(block_environment)
+  let #(return_value, tmp_env) =
+    environment.get_return_value(line, block_environment)
   let assert Local(parent: block_parent, ..) = tmp_env
   let return_environment = environment.update_values(environment, block_parent)
   Ok(#(return_value, block_parent, return_environment))
@@ -566,12 +585,12 @@ fn evaluate_unary(
           Error(RuntimeError(
             "Unexpected argument to unary '-'. Expected a number, got " <> string.inspect(
               value,
-            ) <> ".",
+            ) <> ".",line: right_expr.line
           ))
       }
     }
     _ ->
-      Error(RuntimeError(message: "unexpected operator in unary expression."))
+      Error(RuntimeError(message: "unexpected operator in unary expression.", line: right_expr.line))
   }
 }
 
