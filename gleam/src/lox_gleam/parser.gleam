@@ -10,10 +10,10 @@ import lox_gleam/types.{
   And, Assign, Bang, BangEqual, Binary, Block, Call, Comma, Else, Eof, Equal,
   EqualEqual, Expr, ExprStmt, For, Fun, FunDecl, Greater, GreaterEqual, Grouping,
   Identifier, If, IfStmt, LeftBrace, LeftParen, Less, LessEqual, Literal,
-  Logical, LoxBool, LoxNil, LoxString, LoxValue, Minus, Or, Plus, Print, PrintStmt, Return,
-  ReturnStmt, RightBrace, RightParen, Semicolon, Slash, Star, Stmt, Token,
-  TokenFalse, TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Unary,
-  Var, VarDecl, Variable, While, WhileStmt,
+  Logical, LoxBool, LoxNil, LoxString, LoxValue, Minus, Or, Plus, Print,
+  PrintStmt, Return, ReturnStmt, RightBrace, RightParen, Semicolon, Slash, Star,
+  Stmt, Token, TokenFalse, TokenNil, TokenNumber, TokenString, TokenType,
+  TrueToken, Unary, Var, VarDecl, Variable, While, WhileStmt,
 }
 
 type ExprAndTokens =
@@ -30,7 +30,11 @@ pub fn parse(tokens: LoxResult(List(Token))) -> LoxResult(List(Stmt)) {
       #(statements, []) | #(statements, [Token(token_type: Eof, ..)]) ->
         Ok(list.reverse(statements))
       #(_statements, [Token(line: line, ..)]) ->
-        Error(ParseError(message: "unexpected end of tokens.", line: line, token: LoxString("")))
+        Error(ParseError(
+          message: "unexpected end of tokens.",
+          line: line,
+          token: LoxString(""),
+        ))
       #(statements, new_tokens) -> {
         // This handles the weird case of top-level blocks.
         use new_statements <- then(parse(Ok(new_tokens)))
@@ -109,7 +113,7 @@ fn block(
       Error(ParseError(
         message: "unexpected end of file while parsing block on line " <> line <> ".",
         line: line,
-        token: first_token.value
+        token: first_token.value,
       ))
     _ -> {
       declaration(Ok(#([], tokens)))
@@ -133,9 +137,9 @@ fn consume(
     True -> Ok(tokens1)
     False ->
       Error(ParseError(
-        message: "line " <> first_token.line <> ": " <> message,
+        message: message,
         line: first_token.line,
-        token: first_token.value
+        token: first_token.value,
       ))
   }
 }
@@ -300,7 +304,11 @@ fn function_declaration(
         token: name_token.value,
       ))
     _, _, _ ->
-      Error(ParseError("Expect " <> kind <> " name.", line: name_token.line, token: name_token.value))
+      Error(ParseError(
+        "Expect " <> kind <> " name.",
+        line: name_token.line,
+        token: name_token.value,
+      ))
   }
   |> then(fn(result) {
     let #(parameters, tokens2) = result
@@ -316,12 +324,29 @@ fn build_params(
   tokens: List(Token),
 ) -> LoxResult(#(List(LoxValue), List(Token))) {
   let [param, comma_or_paren, ..new_tokens] = tokens
-  case param.token_type, comma_or_paren.token_type {
-    Identifier, RightParen -> Ok(#(list.reverse([param.value, ..params]), new_tokens))
-    Identifier, Comma -> build_params([param.value, ..params], new_tokens)
-    Identifier, _ ->
-      Error(ParseError("Expect ')' after parameters.", line: comma_or_paren.line, token: comma_or_paren.value))
-    _, _ -> Error(ParseError("Expect parameter name.", line: param.line, token: param.value))
+  case list.length(params) >= 255, param.token_type, comma_or_paren.token_type {
+    True, _, _ ->
+      Error(ParseError(
+        "Can't have more than 255 parameters.",
+        line: param.line,
+        token: param.value,
+      ))
+    False, Identifier, RightParen ->
+      Ok(#(list.reverse([param.value, ..params]), new_tokens))
+    False, Identifier, Comma ->
+      build_params([param.value, ..params], new_tokens)
+    False, Identifier, _ ->
+      Error(ParseError(
+        "Expect ')' after parameters.",
+        line: comma_or_paren.line,
+        token: comma_or_paren.value,
+      ))
+    False, _, _ ->
+      Error(ParseError(
+        "Expect parameter name.",
+        line: param.line,
+        token: param.value,
+      ))
   }
 }
 
@@ -331,31 +356,22 @@ fn build_fun_declaration(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  case list.length(parameters) >= 255 {
-    True ->
-      Error(ParseError(
-        "Can't have more than 255 parameters.",
-        line: name_token.line,
-        token: name_token.value,
-      ))
-    False ->
-      statements
-      |> block(tokens)
-      |> result.map(fn(result1) {
-        let assert #(
-          [Block(statements: body, line: line), ..statements],
-          next_tokens,
-        ) = result1
-        let fun_declaration =
-          FunDecl(
-            name: name_token.value,
-            params: parameters,
-            body: body,
-            line: line,
-          )
-        #([fun_declaration, ..statements], next_tokens)
-      })
-  }
+  statements
+  |> block(tokens)
+  |> result.map(fn(result1) {
+    let assert #(
+      [Block(statements: body, line: line), ..statements],
+      next_tokens,
+    ) = result1
+    let fun_declaration =
+      FunDecl(
+        name: name_token.value,
+        params: parameters,
+        body: body,
+        line: line,
+      )
+    #([fun_declaration, ..statements], next_tokens)
+  })
 }
 
 fn if_statement(
@@ -483,15 +499,15 @@ fn var_declaration(
           Error(ParseError(
             message: "the variable declaration on line " <> line <> " must be followed by ';' or an assignment.",
             line: line,
-            token: variable_name
+            token: variable_name,
           ))
       }
     }
-    Token(line: line, value: value..) ->
+    Token(line: line, value: value, ..) ->
       Error(ParseError(
         message: "expect a variable name after the 'var' keyword on line " <> line <> ".",
         line: line,
-        token: value
+        token: value,
       ))
   }
 }
@@ -538,7 +554,7 @@ fn do_while_statement(
   statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(StmtsAndTokens) {
-  let [Token(value: value, ..), .._] = tokens
+  let [Token(value: value, ..), ..] = tokens
   statement(statements, tokens)
   |> then(fn(result) {
     case result {
@@ -551,7 +567,7 @@ fn do_while_statement(
         Error(ParseError(
           message: "expected statement as 'while' loop body.",
           line: condition.line,
-          token: value
+          token: value,
         ))
     }
   })
@@ -562,7 +578,7 @@ fn expression(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 }
 
 fn assignment(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
-  let [Token(value: value, ..), .._] = tokens
+  let [Token(value: value, ..), ..] = tokens
   tokens
   |> or()
   |> then(fn(result) {
@@ -592,7 +608,7 @@ fn do_assignment(
 }
 
 fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
-  let [Token(value: value, ..), .._] = tokens
+  let [Token(value: value, ..), ..] = tokens
   tokens
   |> assignment()
   |> then(fn(result) {
@@ -686,12 +702,18 @@ fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   |> then(fn(result) {
     let #(arguments, closing_paren, [left_paren, ..new_tokens]) = result
     case list.length(arguments) {
-      n if n >= 255 ->
+      n if n >= 255 -> {
+        // for error reporting, we need the token *before* the closing paren.
+        let assert Ok(error_token) =
+          tokens
+          |> list.take_while(fn(token) { token != closing_paren })
+          |> list.last()
         Error(ParseError(
           message: "Can't have more than 255 arguments.",
-          line: closing_paren.line,
-          token: closing_paren.value,
+          line: error_token.line,
+          token: error_token.value,
         ))
+      }
       _ -> {
         let call_expr =
           Call(line: callee.line, callee: callee, arguments: arguments)
@@ -721,7 +743,7 @@ fn build_arguments(
         Error(ParseError(
           message: "Expect ')' after arguments.",
           line: comma_or_paren.line,
-          token: comma_or_paren.value
+          token: comma_or_paren.value,
         ))
     }
   })
@@ -748,7 +770,12 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
       ))
     LeftParen -> do_grouping(first_token, other_tokens)
     Eof -> Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
-    _ -> Error(ParseError(message: "unexpected token.", line: first_token.line, token: first_token.value))
+    _ ->
+      Error(ParseError(
+        message: "unexpected token.",
+        line: first_token.line,
+        token: first_token.value,
+      ))
   }
 }
 

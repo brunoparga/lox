@@ -37,7 +37,7 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
     Error(ParseError(message: message, line: line, token: token)) -> {
       stderr(
         atom.create_from_string("standard_error"),
-        "[" <> line <> "] Error at '" <> types.read_value(token) <> "': " <> message,
+        "[line " <> line <> "] Error at '" <> types.read_value(token) <> "': " <> message <> "\n",
       )
       halt(exit_code)
     }

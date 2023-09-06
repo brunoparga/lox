@@ -62,9 +62,10 @@ pub type LoxValue {
 
 pub fn read_value(value: LoxValue) -> String {
   case value {
-    LoxNumber(number) -> number
-            |> float.truncate()
-            |> string.inspect()
+    LoxNumber(number) ->
+      number
+      |> float.truncate()
+      |> string.inspect()
     LoxString(name) -> name
     ReturnValue -> "ReturnValue"
     LoxNil -> "LoxNil"

@@ -429,6 +429,8 @@ fn evaluate_call(
   let assert Call(line, callee, arguments) = call_expr
   let callee_name = case callee {
     Variable(name: name, ..) -> name
+    // The "unreachable" code can be reached in nested calls.
+    // Call(callee: Expr)
     _ -> LoxString("Unreachable")
   }
   evaluate(callee, environment)
