@@ -414,7 +414,7 @@ fn evaluate_call(
   call_expr: Expr,
   environment: Environment,
 ) -> LoxResult(#(LoxValue, Environment)) {
-  let assert Call(_line, callee, arguments) = call_expr
+  let assert Call(line, callee, arguments) = call_expr
   let callee_name = case callee {
     Variable(name: name, ..) -> name
     _ -> LoxString("Unreachable")
@@ -425,7 +425,7 @@ fn evaluate_call(
     list.fold(arguments, Ok(#([], environment1)), evaluate_arguments)
     |> then(fn(args_and_environment) {
       let #(args, env) = args_and_environment
-      call_function(callee_name, callee_value, args, env)
+      call_function(line, callee_name, callee_value, args, env)
     })
   })
 }
@@ -441,6 +441,7 @@ fn evaluate_arguments(
 }
 
 fn call_function(
+  line: String,
   callee_name: LoxValue,
   callee_value: LoxValue,
   argument_values: List(LoxValue),
@@ -450,7 +451,7 @@ fn call_function(
   let message = fn(arity) {
     "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
       args_length,
-    )
+    ) <> "."
   }
   case callee_value {
     NativeFunction(arity: arity, ..) -> {
@@ -492,7 +493,7 @@ fn call_function(
             )
           Ok(#(return_value, return_environment))
         }
-        False -> Error(RuntimeError(message: message(arity)))
+        False -> Error(error.SpecialError(message: message(arity), line: line))
       }
     }
     _ -> Error(RuntimeError(message: "Can only call functions and classes."))

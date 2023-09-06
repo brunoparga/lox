@@ -366,6 +366,8 @@ fn do_if_statement(
   |> then(fn(result) {
     let #(
       [then_branch, ..new_statements],
+      // This assumes there are tokens after the then branch. That
+      // assumption might not hold.
       [else, ..new_tokens] as result_tokens,
     ) = result
     case else.token_type {

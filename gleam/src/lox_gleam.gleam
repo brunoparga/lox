@@ -22,7 +22,7 @@ pub fn main() -> error.LoxResult(types.Environment) {
   case erlang.start_arguments() {
     [] -> run_prompt()
     [filename] -> run_file(filename)
-    _ -> Error(error.TooManyArgumentsError)
+    _ -> Error(error.TooManyArgumentsError("Too many arguments given. Usage: gleam run -- [script]"))
   }
 }
 
@@ -40,7 +40,10 @@ fn do_run_prompt(environment: types.Environment) -> types.Environment {
       case run(string.trim(line), environment) {
         Ok(new_environment) -> do_run_prompt(new_environment)
         // The REPL session continues if the user messes up
-        Error(_) -> do_run_prompt(environment.create(option.None))
+        Error(error) -> {
+          io.println_error(error.message)
+          do_run_prompt(environment)
+        }
       }
     }
     Error(_) -> environment.create(option.None)
