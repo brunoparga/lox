@@ -256,7 +256,8 @@ fn number_text(
     // Trying to have a number with two decimal points
     Ok(#(".", _)), True ->
       Error(ScanError(
-        "on line " <> line <> "; a number can only have one decimal point.",line: line
+        "on line " <> line <> "; a number can only have one decimal point.",
+        line: line,
       ))
     // Process the decimal and the first character after it
     Ok(#(".", new_source)), False -> handle_decimal(current, new_source, line)
@@ -286,7 +287,8 @@ fn handle_decimal(
     }
     False ->
       Error(ScanError(
-        "on line " <> line <> "; a decimal point must be followed by a digit.",line: line
+        "on line " <> line <> "; a decimal point must be followed by a digit.",
+        line: line,
       ))
   }
 }

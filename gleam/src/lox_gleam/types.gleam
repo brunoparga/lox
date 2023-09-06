@@ -1,6 +1,8 @@
 //// This module collects all the types in the application.
 
+import gleam/float
 import gleam/map
+import gleam/string
 import gleam/option
 
 pub type Table =
@@ -60,9 +62,13 @@ pub type LoxValue {
 
 pub fn read_value(value: LoxValue) -> String {
   case value {
+    LoxNumber(number) -> number
+            |> float.truncate()
+            |> string.inspect()
     LoxString(name) -> name
     ReturnValue -> "ReturnValue"
-    _ -> "Unreachable"
+    LoxNil -> "LoxNil"
+    _ -> "FFFUUUUUnreachable"
   }
 }
 

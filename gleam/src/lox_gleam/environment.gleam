@@ -41,7 +41,7 @@ pub fn assign(
     }
     True, False ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> types.read_value(name) <> "'.",
+        message: "Undefined variable '" <> types.read_value(name) <> "'.",
         line: line,
       ))
   }
@@ -109,7 +109,7 @@ pub fn get(
     }
     True, Error(Nil) ->
       Error(error.RuntimeError(
-        message: "undefined variable '" <> types.read_value(variable) <> "'.",
+        message: "Undefined variable '" <> types.read_value(variable) <> "'.",
         line: line,
       ))
   }

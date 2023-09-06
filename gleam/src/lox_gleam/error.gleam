@@ -2,6 +2,7 @@
 //// function to report them.
 
 import gleam/erlang/atom
+import lox_gleam/types.{LoxValue}
 
 // See this return type? It is a brazen, shameless lie.
 @external(erlang, "erlang", "halt")
@@ -12,7 +13,7 @@ fn stderr(where: atom.Atom, contents: String) -> Nil
 
 pub type LoxError {
   ErlangError(message: String, line: String)
-  ParseError(message: String, line: String)
+  ParseError(message: String, line: String, token: LoxValue)
   RuntimeError(message: String, line: String)
   ScanError(message: String, line: String)
   TooManyArgumentsError(message: String, line: String)
@@ -33,12 +34,19 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
 
   case result {
     Ok(_) -> result
-    Error(error) -> {
-      let _ = stderr(atom.create_from_string("standard_error"), error.message)
+    Error(ParseError(message: message, line: line, token: token)) -> {
+      stderr(
+        atom.create_from_string("standard_error"),
+        "[" <> line <> "] Error at '" <> types.read_value(token) <> "': " <> message,
+      )
+      halt(exit_code)
+    }
+    Error(RuntimeError(message: message, line: line)) -> {
+      let _ = stderr(atom.create_from_string("standard_error"), message)
       let _ =
         stderr(
           atom.create_from_string("standard_error"),
-          "\n[line " <> error.line <> "]\n",
+          "\n[line " <> line <> "]\n",
         )
       halt(exit_code)
     }

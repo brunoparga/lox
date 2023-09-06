@@ -57,7 +57,8 @@ fn do_run_prompt(environment: types.Environment) -> types.Environment {
 fn run_file(filename: String) -> error.LoxResult(types.Environment) {
   case file.read(from: filename) {
     Ok(contents) -> run(contents, environment.create(option.None))
-    Error(error) -> Error(error.ErlangError(message: string.inspect(error), line: "0"))
+    Error(error) ->
+      Error(error.ErlangError(message: string.inspect(error), line: "0"))
   }
 }
 

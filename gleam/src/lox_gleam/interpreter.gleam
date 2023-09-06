@@ -329,7 +329,7 @@ fn evaluate_binary(
           Ok(#(LoxBool(left_number >. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -340,7 +340,7 @@ fn evaluate_binary(
           Ok(#(LoxBool(left_number >=. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -351,7 +351,7 @@ fn evaluate_binary(
           Ok(#(LoxBool(left_number <. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -362,7 +362,7 @@ fn evaluate_binary(
           Ok(#(LoxBool(left_number <=. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -373,7 +373,7 @@ fn evaluate_binary(
           Ok(#(LoxNumber(left_number -. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -386,7 +386,7 @@ fn evaluate_binary(
           Ok(#(LoxString(left_string <> right_string), environment2))
         _, _ ->
           Error(RuntimeError(
-            message: "binary operator Plus takes either two numbers or two strings.",
+            message: "Operands must be two numbers or two strings.",
             line: left_expr.line,
           ))
       }
@@ -398,7 +398,7 @@ fn evaluate_binary(
           Ok(#(LoxNumber(left_number /. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -409,7 +409,7 @@ fn evaluate_binary(
           Ok(#(LoxNumber(left_number *. right_number), environment2))
         None ->
           Error(RuntimeError(
-            message: "binary operator " <> string.inspect(operator) <> " takes two numbers.",
+            message: "Operands must be numbers.",
             line: left_expr.line,
           ))
       }
@@ -583,14 +583,16 @@ fn evaluate_unary(
         LoxNumber(number) -> Ok(#(LoxNumber(0.0 -. number), new_environment))
         _ ->
           Error(RuntimeError(
-            "Unexpected argument to unary '-'. Expected a number, got " <> string.inspect(
-              value,
-            ) <> ".",line: right_expr.line
+            message: "Operand must be a number.",
+            line: right_expr.line,
           ))
       }
     }
     _ ->
-      Error(RuntimeError(message: "unexpected operator in unary expression.", line: right_expr.line))
+      Error(RuntimeError(
+        message: "unexpected operator in unary expression.",
+        line: right_expr.line,
+      ))
   }
 }
 
