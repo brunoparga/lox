@@ -84,7 +84,7 @@ fn add_simple_token(
   line: String,
 ) -> LoxResult(List(Token)) {
   let token =
-    Token(token_type: text_to_token_type(text), value: LoxNil, line: line)
+    Token(token_type: text_to_token_type(text), value: LoxString(text), line: line)
   do_scan(source, [token, ..tokens], line)
 }
 
@@ -330,11 +330,7 @@ fn add_text_based(
   |> result.then(fn(result) {
     let #(text, new_source) = result
     let token_type = text_to_token_type(text)
-    let value = case token_type {
-      Identifier -> LoxString(text)
-      _ -> LoxNil
-    }
-    let token = Token(token_type: token_type, value: value, line: line)
+    let token = Token(token_type: token_type, value: LoxString(text), line: line)
     do_scan(new_source, [token, ..tokens], line)
   })
 }

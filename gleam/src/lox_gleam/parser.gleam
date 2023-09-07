@@ -772,7 +772,7 @@ fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
     Eof -> Ok(#(Literal(value: LoxNil, line: first_token.line), other_tokens))
     _ ->
       Error(ParseError(
-        message: "unexpected token.",
+        message: "Expect expression.",
         line: first_token.line,
         token: first_token.value,
       ))
