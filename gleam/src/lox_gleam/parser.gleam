@@ -505,7 +505,7 @@ fn var_declaration(
     }
     Token(line: line, value: value, ..) ->
       Error(ParseError(
-        message: "expect a variable name after the 'var' keyword on line " <> line <> ".",
+        message: "Expect variable name.",
         line: line,
         token: value,
       ))
