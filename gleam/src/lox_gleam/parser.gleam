@@ -600,16 +600,16 @@ fn do_assignment(
   name_expr: Expr,
   tokens: List(Token),
 ) -> LoxResult(ExprAndTokens) {
-  let [equals, ..tokens1] = tokens
+  let [equals, ..] = tokens
   case equals.token_type {
-    Equal -> do_valid_assignment(name_expr, tokens1)
+    Equal -> do_valid_assignment(name_expr, tokens)
     _ -> Ok(#(name_expr, tokens))
   }
 }
 
 fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
-  let [Token(value: value, ..), ..] = tokens
-  tokens
+  let [Token(value: value, ..), ..tokens1] = tokens
+  tokens1
   |> assignment()
   |> then(fn(result) {
     let #(value_expr, new_tokens) = result
@@ -618,7 +618,7 @@ fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
         Ok(#(Assign(name: name, value: value_expr, line: line), new_tokens))
       _ ->
         Error(ParseError(
-          message: "invalid assignment target.",
+          message: "Invalid assignment target.",
           line: value_expr.line,
           token: value,
         ))

@@ -67,11 +67,7 @@ fn scan_tokens(
       case is_digit(char), is_alpha(char) {
         True, False -> add_number(source, tokens, line)
         False, True -> add_text_based(source, tokens, line)
-        False, False ->
-          Error(ScanError(
-            "unexpected character on line " <> line <> ".",
-            line: line,
-          ))
+        False, False -> Error(ScanError("Unexpected character.", line: line))
       }
     }
   }
@@ -84,7 +80,11 @@ fn add_simple_token(
   line: String,
 ) -> LoxResult(List(Token)) {
   let token =
-    Token(token_type: text_to_token_type(text), value: LoxString(text), line: line)
+    Token(
+      token_type: text_to_token_type(text),
+      value: LoxString(text),
+      line: line,
+    )
   do_scan(source, [token, ..tokens], line)
 }
 
@@ -189,10 +189,7 @@ fn add_string(
 ) -> LoxResult(List(Token)) {
   source
   |> string.split_once("\"")
-  |> result.replace_error(ScanError(
-    message: "unterminated string on line " <> line <> ".",
-    line: line,
-  ))
+  |> result.replace_error(ScanError(message: "Unterminated string.", line: line))
   |> result.then(fn(result) {
     let #(literal, new_source) = result
     do_add_string(new_source, tokens, line, literal)
@@ -330,7 +327,8 @@ fn add_text_based(
   |> result.then(fn(result) {
     let #(text, new_source) = result
     let token_type = text_to_token_type(text)
-    let token = Token(token_type: token_type, value: LoxString(text), line: line)
+    let token =
+      Token(token_type: token_type, value: LoxString(text), line: line)
     do_scan(new_source, [token, ..tokens], line)
   })
 }

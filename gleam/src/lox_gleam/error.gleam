@@ -41,13 +41,19 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
       )
       halt(exit_code)
     }
+    Error(ScanError(message: message, line: line)) -> {
+      stderr(
+        atom.create_from_string("standard_error"),
+        "[line " <> line <> "] Error: " <> message <> "\n",
+      )
+      halt(exit_code)
+    }
     Error(RuntimeError(message: message, line: line)) -> {
-      let _ = stderr(atom.create_from_string("standard_error"), message)
-      let _ =
-        stderr(
-          atom.create_from_string("standard_error"),
-          "\n[line " <> line <> "]\n",
-        )
+      stderr(atom.create_from_string("standard_error"), message)
+      stderr(
+        atom.create_from_string("standard_error"),
+        "\n[line " <> line <> "]\n",
+      )
       halt(exit_code)
     }
   }
