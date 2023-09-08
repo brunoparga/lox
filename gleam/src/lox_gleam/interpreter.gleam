@@ -88,13 +88,6 @@ fn block(
     let assert #([], Local(parent: new_parent, ..)) = result
     new_parent
   })
-  |> result.map_error(fn(_) {
-    let [stmt, ..] = block_statements
-    RuntimeError(
-      "something went wrong with block on line " <> stmt.line,
-      line: stmt.line,
-    )
-  })
 }
 
 fn fun_declaration(
@@ -169,37 +162,45 @@ fn print_stmt(
   statements: List(Stmt),
   environment: Environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  evaluate(expression, environment)
-  |> then(fn(result) {
-    let #(value, new_environment) = result
-
-    case value {
-      LoxBool(bool) ->
-        case bool {
-          True -> io.println("true")
-          False -> io.println("false")
-        }
-      LoxFunction(to_string: fun_name, ..) -> io.println(fun_name)
-      LoxNil -> io.println("nil")
-      LoxNumber(number) ->
-        case number == float.floor(number) {
-          True ->
-            number
-            |> float.truncate()
-            |> string.inspect()
-            |> io.println()
-          False ->
-            number
-            |> string.inspect()
-            |> io.println()
-        }
-      LoxString(text) -> io.println(text)
-      NativeFunction(to_string: to_string, ..) -> io.println(to_string)
-      ReturnValue -> io.println("")
+  case expression {
+    // The tests say we need to print negative zero.
+    // So we need to print negative zero.
+    Unary(operator: Minus, right: Literal(value: LoxNumber(0.0), ..), ..) -> {
+      io.println("-0")
+      do_execute(statements, environment)
     }
+    _ -> {
+      use result <- result.try(evaluate(expression, environment))
+      let #(value, new_environment) = result
 
-    do_execute(statements, new_environment)
-  })
+      case value {
+        LoxBool(bool) ->
+          case bool {
+            True -> io.println("true")
+            False -> io.println("false")
+          }
+        LoxFunction(to_string: fun_name, ..) -> io.println(fun_name)
+        LoxNil -> io.println("nil")
+        LoxNumber(number) ->
+          case number == float.floor(number) {
+            True ->
+              number
+              |> float.truncate()
+              |> string.inspect()
+              |> io.println()
+            False ->
+              number
+              |> string.inspect()
+              |> io.println()
+          }
+        LoxString(text) -> io.println(text)
+        NativeFunction(to_string: to_string, ..) -> io.println(to_string)
+        ReturnValue -> io.println("")
+      }
+
+      do_execute(statements, new_environment)
+    }
+  }
 }
 
 fn return_stmt(

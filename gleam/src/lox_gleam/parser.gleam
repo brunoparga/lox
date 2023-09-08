@@ -397,14 +397,10 @@ fn do_if_statement(
   statements
   |> statement(tokens)
   |> then(fn(result) {
-    let #(
-      [then_branch, ..new_statements],
-      // This assumes there are tokens after the then branch. That
-      // assumption might not hold.
-      [else, ..new_tokens] as result_tokens,
-    ) = result
-    case else.token_type {
-      Else -> if_then_else(condition, then_branch, new_statements, new_tokens)
+    let #([then_branch, ..new_statements], result_tokens) = result
+    case result_tokens {
+      [Token(token_type: Else, ..), ..new_tokens] ->
+        if_then_else(condition, then_branch, new_statements, new_tokens)
       _ ->
         if_without_else(condition, then_branch, new_statements, result_tokens)
     }
