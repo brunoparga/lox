@@ -87,6 +87,9 @@ static InterpretResult run() {
       case OP_DIVIDE:
         BINARY_OP(NUMBER_VAL, /);
         break;
+      case OP_FALSE:
+        push(BOOL_VAL(false));
+        break;
       case OP_MULTIPLY:
         BINARY_OP(NUMBER_VAL, *);
         break;
@@ -97,6 +100,9 @@ static InterpretResult run() {
         }
         push(NUMBER_VAL(-AS_NUMBER(pop())));
         break;
+      case OP_NIL:
+        push(NIL_VAL);
+        break;
       case OP_RETURN: {
         printValue(pop());
         printf("\n");
@@ -106,6 +112,9 @@ static InterpretResult run() {
         BINARY_OP(NUMBER_VAL, -);
         break;
       }
+      case OP_TRUE:
+        push(BOOL_VAL(true));
+        break;
     }
   }
 

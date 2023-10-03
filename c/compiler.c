@@ -191,6 +191,15 @@ static void binary() {
   }
 }
 
+static void literal() {
+  switch (parser.previous.type) {
+    case TOKEN_FALSE: emitByte(OP_FALSE); break;
+    case TOKEN_NIL: emitByte(OP_NIL); break;
+    case TOKEN_TRUE: emitByte(OP_TRUE); break;
+    default: return;  // Unreachable.
+  }
+}
+
 ParseRule rules[] = {
   [TOKEN_AND]           = {NULL,      NULL,     PREC_NONE},
   [TOKEN_BANG]          = {NULL,      NULL,     PREC_NONE},
@@ -201,7 +210,7 @@ ParseRule rules[] = {
   [TOKEN_ELSE]          = {NULL,      NULL,     PREC_NONE},
   [TOKEN_EQUAL]         = {NULL,      NULL,     PREC_NONE},
   [TOKEN_EQUAL_EQUAL]   = {NULL,      NULL,     PREC_NONE},
-  [TOKEN_FALSE]         = {NULL,      NULL,     PREC_NONE},
+  [TOKEN_FALSE]         = {literal,   NULL,     PREC_NONE},
   [TOKEN_FOR]           = {NULL,      NULL,     PREC_NONE},
   [TOKEN_FUN]           = {NULL,      NULL,     PREC_NONE},
   [TOKEN_GREATER]       = {NULL,      NULL,     PREC_NONE},
@@ -213,7 +222,7 @@ ParseRule rules[] = {
   [TOKEN_LEFT_BRACE]    = {NULL,      NULL,     PREC_NONE},
   [TOKEN_LEFT_PAREN]    = {grouping,  NULL,     PREC_NONE},
   [TOKEN_MINUS]         = {unary,     binary,   PREC_TERM},
-  [TOKEN_NIL]           = {NULL,      NULL,     PREC_NONE},
+  [TOKEN_NIL]           = {literal,   NULL,     PREC_NONE},
   [TOKEN_NUMBER]        = {number,    NULL,     PREC_NONE},
   [TOKEN_OR]            = {NULL,      NULL,     PREC_NONE},
   [TOKEN_PLUS]          = {NULL,      binary,   PREC_TERM},
@@ -227,7 +236,7 @@ ParseRule rules[] = {
   [TOKEN_STRING]        = {NULL,      NULL,     PREC_NONE},
   [TOKEN_SUPER]         = {NULL,      NULL,     PREC_NONE},
   [TOKEN_THIS]          = {NULL,      NULL,     PREC_NONE},
-  [TOKEN_TRUE]          = {NULL,      NULL,     PREC_NONE},
+  [TOKEN_TRUE]          = {literal,   NULL,     PREC_NONE},
   [TOKEN_VAR]           = {NULL,      NULL,     PREC_NONE},
   [TOKEN_WHILE]         = {NULL,      NULL,     PREC_NONE},
 
