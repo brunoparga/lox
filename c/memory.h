@@ -3,16 +3,16 @@
 
 #include "common.h"
 
-#define GROW_CAPACITY(capacity) \
-    ((capacity) < 8 ? 8 : (capacity) * 2)
+#define ALLOCATE(type, count) (type *)reallocate(NULL, sizeof(type) * (count))
 
-#define GROW_ARRAY(type, pointer, oldCount, newCount) \
-    (type*)reallocate(pointer, \
-        sizeof(type) * (newCount))
+#define GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity)*2)
 
-#define FREE_ARRAY(type, pointer, oldCount) \
-    reallocate(pointer, 0)
+#define GROW_ARRAY(type, pointer, oldCount, newCount)                          \
+  (type *)reallocate(pointer, sizeof(type) * (newCount))
 
-void* reallocate(void* pointer, size_t newSize);
+#define FREE_ARRAY(type, pointer, oldCount) reallocate(pointer, 0)
+
+// THE BOOK'S DEFINITION HAS AN AS YET UNUSED ARGUMENT OLD_SIZE!!!!1!!!!
+void *reallocate(void *pointer, size_t newSize);
 
 #endif
