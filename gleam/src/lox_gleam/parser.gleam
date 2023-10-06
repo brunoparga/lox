@@ -95,10 +95,16 @@ fn basic_statement(
   tokens
   |> expression()
   |> then(fn(result) {
-    let #(expr, [Token(token_type: Semicolon, line: line, ..), ..new_tokens]) =
+    let #(expr, [token, ..new_tokens] as all_tokens) =
       result
-    let new_statement = stmt_type(line, expr)
-    declaration(Ok(#([new_statement, ..statements], new_tokens)))
+    let new_statement = stmt_type(token.line, expr)
+    // Gambiarra alert! The semicolon needs to be consumed properly, but
+    // I am not sure where/how to do that.
+    let next_tokens = case token.token_type {
+      Semicolon -> new_tokens
+      _ -> all_tokens
+    }
+    declaration(Ok(#([new_statement, ..statements], next_tokens)))
   })
 }
 
