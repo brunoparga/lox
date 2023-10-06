@@ -163,7 +163,7 @@ fn for_stmt_initializer(
 ) -> LoxResult(#(Option(Stmt), List(Stmt), List(Token))) {
   let [token, ..other_tokens] = tokens
   case token.token_type {
-    Semicolon -> Ok(#(option.None, statements, tokens))
+    Semicolon -> Ok(#(option.None, statements, other_tokens))
     Var ->
       var_declaration(statements, other_tokens)
       |> then(extract_stmt)
