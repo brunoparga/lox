@@ -179,6 +179,16 @@ static InterpretResult run() {
       // Exit interpreter.
       return INTERPRET_OK;
     }
+    case OP_SET_GLOBAL: {
+      ObjString *name = READ_STRING();
+      if (tableSet(&vm.globals, name, peek(0))) {
+        // The condition is true if the variable wasn't already defined.
+        tableDelete(&vm.globals, name);
+        runtimeError("Undefined variable '%s'.", name->chars);
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      break;
+    }
     case OP_SUBTRACT: {
       BINARY_OP(NUMBER_VAL, -);
       break;
