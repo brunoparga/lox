@@ -148,6 +148,9 @@ static InterpretResult run() {
     case OP_NOT:
       push(BOOL_VAL(isFalsy(pop())));
       break;
+    case OP_POP:
+      pop();
+      break;
     case OP_PRINT:
       printValue(pop());
       printf("\n");
