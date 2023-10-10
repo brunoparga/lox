@@ -45,7 +45,7 @@ ObjString *takeString(char *chars, int length) {
     return interned;
   }
 
-    return allocateString(chars, length, hash);
+  return allocateString(chars, length, hash);
 }
 
 ObjString *copyString(const char *chars, int length) {

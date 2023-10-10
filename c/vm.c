@@ -136,7 +136,7 @@ static InterpretResult run() {
     case OP_FALSE:
       push(BOOL_VAL(false));
       break;
-    case OP_GET_GLOBAL:{
+    case OP_GET_GLOBAL: {
       ObjString *name = READ_STRING();
       Value value;
       if (!tableGet(&vm.globals, name, &value)) {
