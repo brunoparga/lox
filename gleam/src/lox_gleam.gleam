@@ -62,7 +62,7 @@ fn run_file(filename: String) -> error.LoxResult(types.Environment) {
   }
 }
 
-pub fn run(
+fn run(
   source: String,
   environment: types.Environment,
 ) -> error.LoxResult(types.Environment) {
@@ -71,4 +71,11 @@ pub fn run(
   |> parser.parse()
   |> interpreter.interpret(environment)
   |> error.report_error()
+}
+
+pub fn run_test(filename: String) -> error.LoxResult(types.Environment) {
+  let empty = environment.create(option.None)
+  let assert Ok(source) =
+    file.read("../../craftinginterpreters/test/" <> filename)
+  run(source, empty)
 }
