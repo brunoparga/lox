@@ -1,7 +1,5 @@
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
 
 #include "memory.h"
 #include "object.h"
@@ -17,7 +15,7 @@ void initTable(Table *table) {
 }
 
 void freeTable(Table *table) {
-  FREE_ARRAY(Entry, table->entries, table.capacity);
+  FREE_ARRAY(Entry, table->entries, table->capacity);
   initTable(table);
 }
 
