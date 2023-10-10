@@ -13,21 +13,26 @@ import lox_gleam/types.{
   And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
   Fun, Greater, GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less,
   LessEqual, LoxNil, LoxNumber, LoxString, Minus, Or, Plus, Print, Return,
-  RightBrace, RightParen, Semicolon, Slash, Star, Super, This, Token, TokenFalse,
-  TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Var, While,
+  RightBrace, RightParen, Semicolon, Slash, Star, Stmt, Super, This, Token,
+  TokenFalse, TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Var,
+  While,
 }
 
-pub fn scan(source: String) -> LoxResult(List(Token)) {
-  result.map(do_scan(source, [], "1"), fn(tokens) { list.reverse(tokens) })
+pub fn scan(source: String) -> LoxResult(#(List(Stmt), List(Token))) {
+  // The main parse function takes a list of statements. So we initialize
+  // that here as an empty list.
+  source
+  |> do_scan(token_list: [], at_line: "1")
+  |> result.map(fn(tokens) { #([], list.reverse(tokens)) })
 }
 
 fn do_scan(
-  source: String,
-  tokens: List(Token),
+  from source: String,
+  token_list tokens: List(Token),
   // The only purpose of hauling these line numbers around is for error
   // reporting, which happens in strings. So it's easier to keep them
   // as strings and convert both ways when arithmetic is needed.
-  line: String,
+  at_line line: String,
 ) -> LoxResult(List(Token)) {
   case source == "" {
     // Add EOF if we're done
