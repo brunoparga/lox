@@ -101,7 +101,7 @@ fn basic_statement(
     // Gambiarra alert! The semicolon needs to be consumed properly, but
     // I am not sure where/how to do that.
     let next_tokens = case token.token_type {
-      Semicolon -> new_tokens
+      Semicolon | RightParen -> new_tokens
       _ -> all_tokens
     }
     declaration(Ok(#([new_statement, ..statements], next_tokens)))
