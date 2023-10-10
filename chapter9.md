@@ -75,6 +75,8 @@ Missing expected error: [2] Error at 'var': Expect expression.
 
 ### Diagnosis
 
+Not needed, as the test is FIXED.
+
 ## Error 5/34
 
 ### File
@@ -202,6 +204,33 @@ Missing expected output '0' on line 24.
 
 #### 6.2 Diagnosis
 
+`basic_statement` also needs to chew up the right paren, in case it is dealing with a for statement
+increment. I've extended the gambi to do just that.
+
+### Attempt 3
+
+#### 6.3 Test output
+
+Unexpected error:
+[line 26] Error at '}': Expect expression.
+Expected return code 0 and got 65. Stderr:
+[line 26] Error at '}': Expect expression.
+Missing expected output '0' on line 6.
+Missing expected output '-1' on line 10.
+Missing expected output 'after' on line 20.
+Missing expected output '0' on line 24.
+
+#### 6.3 Diagnosis
+
+Replicating the gambiarra with the RightBrace token did not change the test output.
+
+The error happens at (before) `for_stmt_condition`, seemingly. The tokens it gets are just the
+semicolon to end the whole block and the EOF.
+
+Actually, the problem is that `for_stmt_initializer` calls `basic_statement`, which calls
+`declaration`. This is the same big problem of functions doing too much (calling the parent recursive
+function instead of just returning the statement/declaration/expression they're supposed to).
+
 ## Error 7/34
 
 ### File
@@ -221,6 +250,9 @@ for ({}; a < 2; a = a + 1) {}
 Missing expected error: [3] Error at ')': Expect ';' after expression.
 
 ### Diagnosis
+
+Like with error number 2, my code cannot yet handle more than one error at a time. Still, I am not
+sure why the second error is supposed to be thrown.
 
 ## Error 8/34
 
@@ -256,18 +288,20 @@ while (false) for (;;) 1;
 
 ### Test output
 
-Unexpected error:
-[line 21] Error at ')': Expect expression.
-Expected return code 0 and got 65. Stderr:
-[line 21] Error at ')': Expect expression.
-Missing expected output '1' on line 4.
-Missing expected output '2' on line 5.
-Missing expected output '3' on line 6.
-Missing expected output '0' on line 14.
-Missing expected output '1' on line 15.
-Missing expected output '2' on line 16.
+Expected return code 0 and got 127. Stderr:
+Expected output '1' on line 4  and got 'exception error: no match of right hand side value []'.
+Expected output '2' on line 5  and got '  in function  lox_gleam@parser:statement/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam@parser.erl, line 110)'.
+Expected output '3' on line 6  and got '  in call from lox_gleam@parser:do_while_statement/3 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam@parser.erl, line 475)'.
+Expected output '0' on line 14  and got '  in call from lox_gleam@parser:if_then_else/4 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam@parser.erl, line 405)'.
+Expected output '1' on line 15  and got '  in call from lox_gleam@parser:do_while_statement/3 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam@parser.erl, line 475)'.
+Expected output '2' on line 16  and got '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam@parser.erl, line 191)'.
+Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+Previously this threw only "expression expected". I miss the old error.
+
+I believe the error is also due to the recursion runoff.
 
 ## Error 9/34
 
@@ -293,6 +327,15 @@ Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/bui
 
 ### Diagnosis
 
+This is another test which would at least change if `declaration` handled an empty token list. Let's
+see what happens if I do that...
+
+... it's obvious in hindsight: `declaration` eventually calls itself, so the way I'd done this before
+gets into an infinite loop. Let's try something different...
+
+... I don't think it's possible to return a value that cannot get into an infinite loop. This issue
+will only go away when functions don't mutually recurse with `declaration`.
+
 ## Error 10/34
 
 ### File
@@ -316,6 +359,8 @@ Got output '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/
 Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+I suspect recursion runoff.
 
 ## Error 11/34
 
@@ -348,6 +393,8 @@ Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/bui
 
 ### Diagnosis
 
+Yup, also recursion runoff.
+
 ## Error 12/34
 
 ### File
@@ -371,6 +418,9 @@ Got output '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/
 Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+Recursion runoff. At this point I'm just eager to go and fix that problem. At least it seems that'll
+give me a lot of bang for the debugging buck.
 
 ## Error 13/34
 
@@ -405,6 +455,7 @@ Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/bui
 ### Diagnosis
 
 Very vague hypothesis: I require the body to be a block, but I should allow any statement instead.
+(The thing I now want to do anyway will hopefully solve this.)
 
 ## Error 14/34
 
@@ -429,6 +480,8 @@ Got output '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/
 Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+Same.
 
 ## Error 15/34
 
@@ -457,6 +510,8 @@ Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/bui
 
 ### Diagnosis
 
+Same.
+
 ## Error 16/34
 
 ### File
@@ -480,6 +535,8 @@ Got output '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/
 Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+Same.
 
 ## Error 17/34
 
@@ -509,6 +566,8 @@ Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/bui
 
 ### Diagnosis
 
+Samesies.
+
 ## Error 18/34
 
 ### File
@@ -532,3 +591,5 @@ Got output '  in call from lox_gleam@parser:parse/1 (/home/bruno/code/learn/lox/
 Got output '  in call from lox_gleam:run/2 (/home/bruno/code/learn/lox/gleam/build/prod/erlang/lox_gleam/_gleam_artefacts/lox_gleam.erl, line 12)' when none was expected.
 
 ### Diagnosis
+
+Yep, they're all the same. I'll try to fix this before looking at the next chapter's tests.
