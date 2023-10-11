@@ -2,7 +2,8 @@
 //// function to report them.
 
 import gleam/erlang/atom
-import lox_gleam/types.{LoxValue}
+import gleam/option
+import lox_gleam/types.{LoxValue, Token}
 
 // See this return type? It is a brazen, shameless lie.
 @external(erlang, "erlang", "halt")
@@ -13,7 +14,12 @@ fn stderr(where: atom.Atom, contents: String) -> Nil
 
 pub type LoxError {
   ErlangError(message: String, line: String)
-  ParseError(message: String, line: String, token: LoxValue)
+  ParseError(
+    message: String,
+    line: String,
+    value: LoxValue,
+    remaining_tokens: option.Option(List(Token)),
+  )
   RuntimeError(message: String, line: String)
   ScanError(message: String, line: String)
   TooManyArgumentsError(message: String, line: String)
@@ -34,11 +40,8 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
 
   case result {
     Ok(_) -> result
-    Error(ParseError(message: message, line: line, token: token)) -> {
-      stderr(
-        atom.create_from_string("standard_error"),
-        "[line " <> line <> "] Error at '" <> types.read_value(token) <> "': " <> message <> "\n",
-      )
+    Error(ParseError(..) as error) -> {
+      print_parse_error(error)
       halt(exit_code)
     }
     Error(ScanError(message: message, line: line)) -> {
@@ -57,4 +60,20 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
       halt(exit_code)
     }
   }
+}
+
+// Unlike the function above, this one does not cause the program to crash.
+pub fn print_error(error: LoxError) -> Nil {
+  case error {
+    ParseError(..) -> print_parse_error(error)
+    _ -> Nil
+  }
+}
+
+fn print_parse_error(error: LoxError) -> Nil {
+  let assert ParseError(message: message, line: line, value: value, ..) = error
+  stderr(
+    atom.create_from_string("standard_error"),
+    "[line " <> line <> "] Error at '" <> types.read_value(value) <> "': " <> message <> "\n",
+  )
 }
