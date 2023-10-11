@@ -235,7 +235,7 @@ fn for_statement(
 ) -> LoxResult(OneStmtAndTokens) {
   tokens
   |> consume(LeftParen, "expect '(' after 'for'.")
-  |> then(fn(tokens1) { for_stmt_initializer(tokens1) })
+  |> then(for_stmt_initializer)
   |> then(for_stmt_condition)
   |> then(for_stmt_increment)
   |> then(for_stmt_body)
@@ -345,7 +345,7 @@ fn body_with_increment(increment_expr: Option(Expr), body: Stmt) -> Stmt {
       let increment_stmt = ExprStmt(expression: expr, line: expr.line)
       case body {
         Block(statements: statements, line: line) ->
-          Block(line, list.append(statements, [increment_stmt]))
+          Block(line, [Block(line, statements), increment_stmt])
         _ -> Block(body.line, [body, increment_stmt])
       }
     }
