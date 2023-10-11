@@ -1,57 +1,41 @@
-## Chapter 8, Statements
-68 tests pass, 1 fails:
+## Regex to get a nice list of only the files
 
-(1) test/variable/shadow_local.lox
+`.lox\n(.|\n)+?\n\n`
+
+replace by `.lox\n`
 
 ## Chapter 9, Control
-78 tests pass, 18 fail.
+87 tests pass, 9 fail.
 
-The one from chapter 8, and the following:
-
-(2) test/for/statement_condition.lox
-(3) test/for/class_in_body.lox
-(4) test/for/var_in_body.lox
-(5) test/for/fun_in_body.lox
-(6) test/for/scope.lox
-(7) test/for/statement_initializer.lox
-(8) test/while/syntax.lox
-(9) test/while/var_in_body.lox
-(10) test/while/fun_in_body.lox
-(11) test/if/truth.lox
-(12) test/if/fun_in_then.lox
-(13) test/if/if.lox
-(14) test/if/var_in_else.lox
-(15) test/if/dangling_else.lox
-(16) test/if/fun_in_else.lox
-(17) test/if/else.lox
-(18) test/if/var_in_then.lox
+(1) test/for/statement_condition.lox
+(2) test/for/statement_initializer.lox
+(3) test/variable/unreached_undefined.lox
+(4) test/while/class_in_body.lox
+(5) test/while/var_in_body.lox
+(6) test/while/fun_in_body.lox
+(7) test/if/truth.lox
+(8) test/if/if.lox
+(9) test/if/dangling_else.lox
 
 ## Chapter 10, Functions
-104 tests pass, 35 fail.
+121 tests pass, 18 fail;
 
-The one from chapter 8,
-The seventeen from chapter 9,
-And the following seventeen:
+the nine from chapter 9,
+and the following nine:
 
-(19) test/function/nested_call_with_arguments.lox
-(20) test/function/recursion.lox
-(21) test/function/local_recursion.lox
-(22) test/function/mutual_recursion.lox
-(23) test/for/syntax.lox
-(24) test/for/return_inside.lox
-(25) test/for/return_closure.lox
-(26) test/for/closure_in_body.lox
-(27) test/while/closure_in_body.lox
-(28) test/closure/assign_to_closure.lox
-(29) test/closure/shadow_closure_with_local.lox
-(30) test/closure/nested_closure.lox
-(31) test/closure/reuse_closure_slot.lox
-(32) test/unexpected_character.lox
-(33) test/return/after_while.lox
-(34) test/return/after_if.lox
-(35) test/return/after_else.lox
+(10) test/function/nested_call_with_arguments.lox
+(11) test/function/recursion.lox
+(12) test/function/local_recursion.lox
+(13) test/function/mutual_recursion.lox
+(14) test/for/syntax.lox
+(15) test/for/closure_in_body.lox
+(16) test/closure/assign_to_closure.lox
+(17) test/closure/nested_closure.lox
+(18) test/unexpected_character.lox
 
 ## Future chapters
+
+(Out of date)
 
 Running the tests for the last chapter of clox (which includes some tests that don't make sense
 to run with jlox), I get 103 passes and 143 failures, a total of 246 tests.

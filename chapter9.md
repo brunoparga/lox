@@ -1,10 +1,9 @@
 # Chapter 9 test report
 
-1 error lives in chapter 8
-18 live in this chapter
-17 live in chapter 10
+9 errors live in this chapter
+9 live in chapter 10
 
-## Error 2/34
+## Error 1/18
 
 ### File
 
@@ -30,6 +29,13 @@ didn't need to be a semicolon right before the closing parenthesis.
 
 On a very positive note, I've discovered and patched a trivial off-by-one error, which in turn
 passed a new previously failing test.
+
+Update: what happens is that the Java parser enters panic mode when the first parse error is
+encountered. This causes it to return `NULL` where it gets an empty block and it expected an
+expression. This means it forgets it is parsing a for loop (due to the `synchronize` method) and
+this causes it to throw the error after the incrementer.
+
+I currently don't do parser panic and synchronization.
 
 ## Error 3/34
 
