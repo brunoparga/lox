@@ -171,6 +171,11 @@ static InterpretResult run() {
     case OP_LESS:
       BINARY_OP(BOOL_VAL, <);
       break;
+    case OP_LOOP: {
+      uint16_t offset = READ_SHORT();
+      vm.ip -= offset;
+      break;
+    }
     case OP_MULTIPLY:
       BINARY_OP(NUMBER_VAL, *);
       break;
