@@ -7,6 +7,7 @@
 typedef enum {
   OP_ADD,
   OP_CALL,
+  OP_CLOSURE,
   OP_CONSTANT,
   OP_DEFINE_GLOBAL,
   OP_DIVIDE,
