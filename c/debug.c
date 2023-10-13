@@ -52,6 +52,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
   switch (instruction) {
   case OP_ADD:
     return simpleInstruction("OP_ADD", offset);
+  case OP_CALL:
+    return byteInstruction("OP_CALL", chunk, offset);
   case OP_CONSTANT:
     return constantInstruction("OP_CONSTANT", chunk, offset);
   case OP_DEFINE_GLOBAL:
