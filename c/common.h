@@ -17,5 +17,5 @@
 // we don't want them to be.
 #undef DEBUG_PRINT_CODE
 #undef DEBUG_TRACE_EXECUTION
-// #undef DEBUG_STRESS_GC
-// #undef DEBUG_LOG_GC
+#undef DEBUG_STRESS_GC
+#undef DEBUG_LOG_GC
