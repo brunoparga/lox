@@ -67,6 +67,7 @@ static void adjustCapacity(Table *table, int capacity) {
     Entry *dest = findEntry(entries, capacity, entry->key);
     dest->key = entry->key;
     dest->value = entry->value;
+    table->count++;
   }
 
   FREE_ARRAY(Entry, table->entries, table->capacity);
