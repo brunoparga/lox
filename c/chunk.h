@@ -7,6 +7,7 @@
 typedef enum {
   OP_ADD,
   OP_CALL,
+  OP_CLASS,
   OP_CLOSE_UPVALUE,
   OP_CLOSURE,
   OP_CONSTANT,
