@@ -395,6 +395,17 @@ static InterpretResult run() {
     case OP_GREATER:
       BINARY_OP(BOOL_VAL, >);
       break;
+    case OP_INHERIT: {
+      Value superclass = peek(1);
+      if (!IS_CLASS(superclass)) {
+        runtimeError("Superclass must be a class.");
+        return INTERPRET_RUNTIME_ERROR;
+      }
+      ObjClass *subclass = AS_CLASS(peek(0));
+      tableAddAll(&AS_CLASS(superclass)->methods, &subclass->methods);
+      pop(); // Subclass.
+      break;
+    }
     case OP_INVOKE: {
       ObjString *method = READ_STRING();
       int argCount = READ_BYTE();

@@ -104,6 +104,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return byteInstruction("OP_GET_UPVALUE", chunk, offset);
   case OP_GREATER:
     return simpleInstruction("OP_GREATER", offset);
+  case OP_INHERIT:
+    return simpleInstruction("OP_INHERIT", offset);
   case OP_INVOKE:
     return invokeInstruction("OP_INVOKE", chunk, offset);
   case OP_JUMP:
