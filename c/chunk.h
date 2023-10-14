@@ -20,6 +20,7 @@ typedef enum {
   OP_GET_PROPERTY,
   OP_GET_UPVALUE,
   OP_GREATER,
+  OP_INVOKE,
   OP_JUMP,
   OP_JUMP_IF_FALSE,
   OP_LESS,
