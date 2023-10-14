@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "chunk.h"
 #include "debug.h"
 #include "object.h"
 #include "value.h"
@@ -88,6 +89,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return constantInstruction("OP_GET_GLOBAL", chunk, offset);
   case OP_GET_LOCAL:
     return byteInstruction("OP_GET_LOCAL", chunk, offset);
+  case OP_GET_PROPERTY:
+    return constantInstruction("OP_GET_PROPERTY", chunk, offset);
   case OP_GET_UPVALUE:
     return byteInstruction("OP_GET_UPVALUE", chunk, offset);
   case OP_GREATER:
@@ -118,6 +121,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return constantInstruction("OP_SET_GLOBAL", chunk, offset);
   case OP_SET_LOCAL:
     return byteInstruction("OP_SET_LOCAL", chunk, offset);
+  case OP_SET_PROPERTY:
+    return constantInstruction("OP_SET_PROPERTY", chunk, offset);
   case OP_SET_UPVALUE:
     return byteInstruction("OP_SET_UPVALUE", chunk, offset);
   case OP_SUBTRACT:
