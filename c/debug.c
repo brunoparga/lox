@@ -1,7 +1,5 @@
-#include <stdint.h>
 #include <stdio.h>
 
-#include "chunk.h"
 #include "debug.h"
 #include "object.h"
 #include "value.h"

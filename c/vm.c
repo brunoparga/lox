@@ -1,16 +1,12 @@
 #include <stdarg.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
 
-#include "chunk.h"
 #include "common.h"
 #include "compiler.h"
 #include "memory.h"
 #include "object.h"
-#include "table.h"
-#include "value.h"
 #include "vm.h"
 
 VM vm;

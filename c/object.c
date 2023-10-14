@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "chunk.h"
 #include "memory.h"
 #include "object.h"
 #include "table.h"

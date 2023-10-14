@@ -69,7 +69,7 @@ static void adjustCapacity(Table *table, int capacity) {
     dest->value = entry->value;
   }
 
-  FREE_ARRAY(Entry, table->entries, table.capacity);
+  FREE_ARRAY(Entry, table->entries, table->capacity);
   table->entries = entries;
   table->capacity = capacity;
 }
