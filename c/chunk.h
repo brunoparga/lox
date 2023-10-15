@@ -40,6 +40,7 @@ typedef enum {
   OP_SET_PROPERTY,
   OP_SET_UPVALUE,
   OP_SUBTRACT,
+  OP_SUPER_INVOKE,
   OP_TRUE,
 } Opcode;
 

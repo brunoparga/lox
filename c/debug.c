@@ -144,6 +144,8 @@ int disassembleInstruction(Chunk *chunk, int offset) {
     return byteInstruction("OP_SET_UPVALUE", chunk, offset);
   case OP_SUBTRACT:
     return simpleInstruction("OP_SUBTRACT", offset);
+  case OP_SUPER_INVOKE:
+    return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
   case OP_TRUE:
     return simpleInstruction("OP_TRUE", offset);
   default:
