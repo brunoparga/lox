@@ -1,4 +1,5 @@
 **/.vscode
 java/jlox
+java/build*
 hello.lox
 **/test.sh
