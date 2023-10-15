@@ -39,6 +39,10 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     }
   }
 
+  private Object evaluate(Expr expr) {
+    return expr.accept(this);
+  }
+
   private void execute(Stmt stmt) {
     stmt.accept(this);
   }
@@ -58,10 +62,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     } finally {
       this.environment = previous;
     }
-  }
-
-  private Object evaluate(Expr expr) {
-    return expr.accept(this);
   }
 
   @Override
@@ -145,82 +145,6 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
   }
 
   @Override
-  public Object visitCallExpr(Expr.Call expr) {
-    Object callee = evaluate(expr.callee);
-
-    List<Object> arguments = new ArrayList<>();
-    for (Expr argument : expr.arguments) {
-      arguments.add(evaluate(argument));
-    }
-
-    if (!(callee instanceof LoxCallable)) {
-      throw new RuntimeError(expr.paren, "Can only call functions and classes.");
-    }
-
-    LoxCallable function = (LoxCallable) callee;
-    if (arguments.size() != function.arity()) {
-      throw new RuntimeError(expr.paren,
-          "Expected " + function.arity() + " arguments but got " + arguments.size() + ".");
-    }
-    return function.call(this, arguments);
-  }
-
-  @Override
-  public Object visitLiteralExpr(Expr.Literal expr) {
-    return expr.value;
-  }
-
-  @Override
-  public Object visitLogicalExpr(Expr.Logical expr) {
-    Object left = evaluate(expr.left);
-
-    if (expr.operator.type == TokenType.OR) {
-      if (isTruthy(left))
-        return left;
-    } else {
-      if (!isTruthy(left))
-        return left;
-    }
-
-    return evaluate(expr.right);
-  }
-
-  @Override
-  public Object visitGroupingExpr(Expr.Grouping expr) {
-    return evaluate(expr.expression);
-  }
-
-  @Override
-  public Object visitUnaryExpr(Expr.Unary expr) {
-    Object right = evaluate(expr.right);
-
-    switch (expr.operator.type) {
-      case BANG:
-        return !isTruthy(right);
-      case MINUS:
-        checkNumberOperand(expr.operator, right);
-        return -(double) right;
-      default:
-        // This should be unreachable.
-        return null;
-    }
-  }
-
-  @Override
-  public Object visitVariableExpr(Expr.Variable expr) {
-    return lookUpVariable(expr.name, expr);
-  }
-
-  private Object lookUpVariable(Token name, Expr expr) {
-    Integer distance = locals.get(expr);
-    if (distance == null) {
-      return globals.get(name);
-    } else {
-      return environment.getAt(distance, name.lexeme);
-    }
-  }
-
-  @Override
   public Object visitBinaryExpr(Expr.Binary expr) {
     Object left = evaluate(expr.left);
     Object right = evaluate(expr.right);
@@ -262,13 +186,88 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
       case STAR:
         checkNumberOperands(expr.operator, left, right);
         return (double) left * (double) right;
-
       default:
         break;
     }
 
-    // Unreachable
+    // Unreachable.
     return null;
+  }
+
+  @Override
+  public Object visitCallExpr(Expr.Call expr) {
+    Object callee = evaluate(expr.callee);
+
+    List<Object> arguments = new ArrayList<>();
+    for (Expr argument : expr.arguments) {
+      arguments.add(evaluate(argument));
+    }
+
+    if (!(callee instanceof LoxCallable)) {
+      throw new RuntimeError(expr.paren, "Can only call functions and classes.");
+    }
+
+    LoxCallable function = (LoxCallable) callee;
+    if (arguments.size() != function.arity()) {
+      throw new RuntimeError(expr.paren,
+          "Expected " + function.arity() + " arguments but got " + arguments.size() + ".");
+    }
+    return function.call(this, arguments);
+  }
+
+  @Override
+  public Object visitGroupingExpr(Expr.Grouping expr) {
+    return evaluate(expr.expression);
+  }
+
+  @Override
+  public Object visitLiteralExpr(Expr.Literal expr) {
+    return expr.value;
+  }
+
+  @Override
+  public Object visitLogicalExpr(Expr.Logical expr) {
+    Object left = evaluate(expr.left);
+
+    if (expr.operator.type == TokenType.OR) {
+      if (isTruthy(left))
+        return left;
+    } else {
+      if (!isTruthy(left))
+        return left;
+    }
+
+    return evaluate(expr.right);
+  }
+
+  @Override
+  public Object visitUnaryExpr(Expr.Unary expr) {
+    Object right = evaluate(expr.right);
+
+    switch (expr.operator.type) {
+      case BANG:
+        return !isTruthy(right);
+      case MINUS:
+        checkNumberOperand(expr.operator, right);
+        return -(double) right;
+      default:
+        // This should be unreachable.
+        return null;
+    }
+  }
+
+  @Override
+  public Object visitVariableExpr(Expr.Variable expr) {
+    return lookUpVariable(expr.name, expr);
+  }
+
+  private Object lookUpVariable(Token name, Expr expr) {
+    Integer distance = locals.get(expr);
+    if (distance == null) {
+      return globals.get(name);
+    } else {
+      return environment.getAt(distance, name.lexeme);
+    }
   }
 
   private void checkNumberOperand(Token operator, Object operand) {
