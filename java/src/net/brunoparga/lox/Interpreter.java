@@ -239,9 +239,11 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
       throw new RuntimeError(expr.operator, "Operands must be two numbers or two strings.");
     case SLASH:
-      return (double) left / (double) right;
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left / (double) right;
     case STAR:
-      return (double) left * (double) right;
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left * (double) right;
 
     default:
       break;
