@@ -13,6 +13,12 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     this.interpreter = interpreter;
   }
 
+  void resolve(List<Stmt> statements) {
+    for (Stmt statement : statements) {
+      resolve(statement);
+    }
+  }
+
   @Override
   public Void visitBlockStmt(Stmt.Block stmt) {
     beginScope();
@@ -115,16 +121,6 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
   }
 
   @Override
-  public Void visitVariableExpr(Expr.Variable expr) {
-    if (!scopes.isEmpty() && scopes.peek().get(expr.name.lexeme) == Boolean.FALSE) {
-      Lox.error(expr.name, "Can't read local variable in its own initializer.");
-    }
-
-    resolveLocal(expr, expr.name);
-    return null;
-  }
-
-  @Override
   public Void visitLogicalExpr(Expr.Logical expr) {
     resolve(expr.left);
     resolve(expr.right);
@@ -137,18 +133,22 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
     return null;
   }
 
+  @Override
+  public Void visitVariableExpr(Expr.Variable expr) {
+    if (!scopes.isEmpty() && scopes.peek().get(expr.name.lexeme) == Boolean.FALSE) {
+      Lox.error(expr.name, "Can't read local variable in its own initializer.");
+    }
+
+    resolveLocal(expr, expr.name);
+    return null;
+  }
+
   private void resolve(Stmt stmt) {
     stmt.accept(this);
   }
 
   private void resolve(Expr expr) {
     expr.accept(this);
-  }
-
-  void resolve(List<Stmt> statements) {
-    for (Stmt statement : statements) {
-      resolve(statement);
-    }
   }
 
   private void resolveFunction(Stmt.Function function) {
