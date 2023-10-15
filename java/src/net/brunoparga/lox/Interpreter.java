@@ -186,14 +186,14 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     Object right = evaluate(expr.right);
 
     switch (expr.operator.type) {
-    case BANG:
-      return !isTruthy(right);
-    case MINUS:
-      checkNumberOperand(expr.operator, right);
-      return -(double) right;
-    default:
-      // This should be unreachable.
-      return null;
+      case BANG:
+        return !isTruthy(right);
+      case MINUS:
+        checkNumberOperand(expr.operator, right);
+        return -(double) right;
+      default:
+        // This should be unreachable.
+        return null;
     }
   }
 
@@ -208,45 +208,45 @@ class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
     Object right = evaluate(expr.right);
 
     switch (expr.operator.type) {
-    case BANG_EQUAL:
-      return !isEqual(left, right);
-    case EQUAL_EQUAL:
-      return isEqual(left, right);
-    case GREATER:
-      checkNumberOperands(expr.operator, left, right);
-      return (double) left > (double) right;
-    case GREATER_EQUAL:
-      checkNumberOperands(expr.operator, left, right);
+      case BANG_EQUAL:
+        return !isEqual(left, right);
+      case EQUAL_EQUAL:
+        return isEqual(left, right);
+      case GREATER:
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left > (double) right;
+      case GREATER_EQUAL:
+        checkNumberOperands(expr.operator, left, right);
 
-      return (double) left >= (double) right;
-    case LESS:
-      checkNumberOperands(expr.operator, left, right);
-      return (double) left < (double) right;
-    case LESS_EQUAL:
-      checkNumberOperands(expr.operator, left, right);
-      return (double) left <= (double) right;
-    case MINUS:
-      checkNumberOperands(expr.operator, left, right);
-      return (double) left - (double) right;
-    case PLUS:
-      if (left instanceof Double && right instanceof Double) {
-        return (double) left + (double) right;
-      }
+        return (double) left >= (double) right;
+      case LESS:
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left < (double) right;
+      case LESS_EQUAL:
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left <= (double) right;
+      case MINUS:
+        checkNumberOperands(expr.operator, left, right);
+        return (double) left - (double) right;
+      case PLUS:
+        if (left instanceof Double && right instanceof Double) {
+          return (double) left + (double) right;
+        }
 
-      if (left instanceof String && right instanceof String) {
-        return (String) left + (String) right;
-      }
+        if (left instanceof String && right instanceof String) {
+          return (String) left + (String) right;
+        }
 
-      throw new RuntimeError(expr.operator, "Operands must be two numbers or two strings.");
-    case SLASH:
+        throw new RuntimeError(expr.operator, "Operands must be two numbers or two strings.");
+      case SLASH:
         checkNumberOperands(expr.operator, left, right);
         return (double) left / (double) right;
-    case STAR:
+      case STAR:
         checkNumberOperands(expr.operator, left, right);
         return (double) left * (double) right;
 
-    default:
-      break;
+      default:
+        break;
     }
 
     // Unreachable
