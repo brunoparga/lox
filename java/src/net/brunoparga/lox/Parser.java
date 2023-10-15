@@ -235,7 +235,7 @@ class Parser {
     while (match(AND)) {
       Token operator = previous();
       Expr right = equality();
-      expr = new Expr.Binary(expr, operator, right);
+      expr = new Expr.Logical(expr, operator, right);
     }
 
     return expr;
@@ -408,18 +408,18 @@ class Parser {
         return;
 
       switch (peek().type) {
-      case CLASS:
-      case FOR:
-      case FUN:
-      case IF:
-      case PRINT:
-      case RETURN:
-      case VAR:
-      case WHILE:
-        return;
+        case CLASS:
+        case FOR:
+        case FUN:
+        case IF:
+        case PRINT:
+        case RETURN:
+        case VAR:
+        case WHILE:
+          return;
 
-      default:
-        break;
+        default:
+          break;
       }
 
       advance();
