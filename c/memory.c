@@ -187,10 +187,10 @@ static void sweep() {
     } else {
       Obj *unreached = object;
       object = object->next;
-      if (previous != NULL) {
-        previous->next = object;
-      } else {
+      if (previous == NULL) {
         vm.objects = object;
+      } else {
+        previous->next = object;
       }
 
       freeObject(unreached);
