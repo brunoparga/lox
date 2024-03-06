@@ -10,13 +10,14 @@ import gleam/pair
 import gleam/result.{then}
 import gleam/string
 import lox_gleam/types.{
-  And, Assign, Bang, BangEqual, Binary, Block, Call, Environment, EqualEqual,
-  Expr, ExprStmt, FunDecl, Greater, GreaterEqual, Grouping, IfStmt, Less,
-  LessEqual, Literal, Local, Logical, LoxBool, LoxFunction, LoxNil, LoxNumber,
-  LoxString, LoxValue, Minus, NativeFunction, Or, Plus, PrintStmt, ReturnStmt,
-  ReturnValue, Slash, Star, Stmt, TokenType, Unary, VarDecl, Variable, WhileStmt,
+  type Environment, type Expr, type LoxValue, type Stmt, type TokenType, And,
+  Assign, Bang, BangEqual, Binary, Block, Call, EqualEqual, ExprStmt, FunDecl,
+  Greater, GreaterEqual, Grouping, IfStmt, Less, LessEqual, Literal, Local,
+  Logical, LoxBool, LoxFunction, LoxNil, LoxNumber, LoxString, Minus,
+  NativeFunction, Or, Plus, PrintStmt, ReturnStmt, ReturnValue, Slash, Star,
+  Unary, VarDecl, Variable, WhileStmt,
 }
-import lox_gleam/error.{LoxResult, RuntimeError}
+import lox_gleam/error.{type LoxResult, RuntimeError}
 import lox_gleam/environment
 
 @external(erlang, "os", "system_time")
@@ -30,7 +31,7 @@ pub fn interpret(
   stmts
   |> execute(environment)
   |> result.map(fn(result) {
-    let #([], new_environment) = result
+    let assert #([], new_environment) = result
     new_environment
   })
 }
@@ -119,7 +120,7 @@ fn if_stmt(
         if_statement
       evaluate(condition, environment)
       |> then(fn(result) {
-        let #(value, new_environment) = result
+        let assert #(value, new_environment) = result
         case is_truthy(value), else_branch {
           True, _ ->
             execute_branch(then_branch, other_statements, new_environment)
@@ -152,7 +153,7 @@ fn expression_stmt(
 ) -> LoxResult(#(List(Stmt), Environment)) {
   evaluate(expression, environment)
   |> then(fn(result) {
-    let #(_value, new_environment) = result
+    let assert #(_value, new_environment) = result
     do_execute(statements, new_environment)
   })
 }
@@ -171,7 +172,7 @@ fn print_stmt(
     }
     _ -> {
       use result <- result.try(evaluate(expression, environment))
-      let #(value, new_environment) = result
+      let assert #(value, new_environment) = result
 
       case value {
         LoxBool(bool) ->
@@ -207,7 +208,7 @@ fn return_stmt(
   return_expr: Expr,
   environment: Environment,
 ) -> LoxResult(#(List(Stmt), Environment)) {
-  let #(return_value, env1) = case evaluate(return_expr, environment) {
+  let assert #(return_value, env1) = case evaluate(return_expr, environment) {
     Ok(result) -> result
     Error(_) -> #(LoxNil, environment)
   }
@@ -224,7 +225,7 @@ fn variable_declaration(
 ) -> LoxResult(#(List(Stmt), Environment)) {
   evaluate(initializer, environment)
   |> then(fn(result) {
-    let #(value, environment1) = result
+    let assert #(value, environment1) = result
     let environment2 = environment.define(environment1, name, value)
     do_execute(statements, environment2)
   })
@@ -238,7 +239,7 @@ fn while_stmt(
 ) -> LoxResult(#(List(Stmt), Environment)) {
   evaluate(condition, environment)
   |> then(fn(result) {
-    let #(value, environment1) = result
+    let assert #(value, environment1) = result
     case is_truthy(value) {
       True -> do_while_stmt(condition, body, other_statements, environment1)
       False -> execute(other_statements, environment1)
@@ -257,7 +258,7 @@ fn do_while_stmt(
     Error(_) -> {
       execute([body], environment)
       |> then(fn(result) {
-        let #(_stmt, new_environment) = result
+        let assert #(_stmt, new_environment) = result
         while_stmt(condition, body, other_statements, new_environment)
       })
     }
@@ -298,7 +299,7 @@ fn do_assignment(
   name: LoxValue,
   result: #(LoxValue, Environment),
 ) -> LoxResult(#(LoxValue, Environment)) {
-  let #(value, environment) = result
+  let assert #(value, environment) = result
   environment.assign(line, environment, name, value)
   |> then(fn(new_environment) { Ok(#(value, new_environment)) })
 }
@@ -417,7 +418,9 @@ fn evaluate_binary(
     }
     _ ->
       Error(RuntimeError(
-        message: "unrecognized token " <> string.inspect(operator) <> " in binary expression.",
+        message: "unrecognized token "
+          <> string.inspect(operator)
+          <> " in binary expression.",
         line: left_expr.line,
       ))
   }
@@ -436,10 +439,10 @@ fn evaluate_call(
   }
   evaluate(callee, environment)
   |> then(fn(result) {
-    let #(callee_value, environment1) = result
+    let assert #(callee_value, environment1) = result
     list.fold(arguments, Ok(#([], environment1)), evaluate_arguments)
     |> then(fn(args_and_environment) {
-      let #(args, env) = args_and_environment
+      let assert #(args, env) = args_and_environment
       call_function(line, callee_name, callee_value, args, env)
     })
   })
@@ -464,9 +467,11 @@ fn call_function(
 ) -> LoxResult(#(LoxValue, Environment)) {
   let args_length = list.length(argument_values)
   let message = fn(arity) {
-    "Expected " <> string.inspect(arity) <> " arguments but got " <> string.inspect(
-      args_length,
-    ) <> "."
+    "Expected "
+    <> string.inspect(arity)
+    <> " arguments but got "
+    <> string.inspect(args_length)
+    <> "."
   }
   case callee_value {
     NativeFunction(arity: arity, ..) -> {
@@ -537,19 +542,16 @@ fn do_call_function(
   let assert Ok(block_environment) =
     params
     |> list.zip(with: arguments)
-    |> list.fold(
-      from: fun_environment,
-      with: fn(current_env, param_arg_pair) {
-        environment.define(
-          current_env,
-          pair.first(param_arg_pair),
-          pair.second(param_arg_pair),
-        )
-      },
-    )
+    |> list.fold(from: fun_environment, with: fn(current_env, param_arg_pair) {
+      environment.define(
+        current_env,
+        pair.first(param_arg_pair),
+        pair.second(param_arg_pair),
+      )
+    })
     |> block(body, _)
 
-  let #(return_value, tmp_env) =
+  let assert #(return_value, tmp_env) =
     environment.get_return_value(line, block_environment)
   let assert Local(parent: block_parent, ..) = tmp_env
   let return_environment = environment.update_values(environment, block_parent)
@@ -570,6 +572,7 @@ fn evaluate_logical(
         evaluate(right_expr, environment1)
       Ok(#(right_value, environment2))
     }
+    _, _ -> Error(RuntimeError(message: "720 Unpossible", line: "-1"))
   }
 }
 

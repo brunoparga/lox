@@ -8,13 +8,13 @@ import gleam/list
 import gleam/regex
 import gleam/result
 import gleam/string
-import lox_gleam/error.{LoxResult, ScanError}
+import lox_gleam/error.{type LoxResult, ScanError}
 import lox_gleam/types.{
-  And, Bang, BangEqual, Class, Comma, Dot, Else, Eof, Equal, EqualEqual, For,
-  Fun, Greater, GreaterEqual, Identifier, If, LeftBrace, LeftParen, Less,
-  LessEqual, LoxNil, LoxNumber, LoxString, Minus, Or, Plus, Print, Return,
-  RightBrace, RightParen, Semicolon, Slash, Star, Stmt, Super, This, Token,
-  TokenFalse, TokenNil, TokenNumber, TokenString, TokenType, TrueToken, Var,
+  type Stmt, type Token, type TokenType, And, Bang, BangEqual, Class, Comma, Dot,
+  Else, Eof, Equal, EqualEqual, For, Fun, Greater, GreaterEqual, Identifier, If,
+  LeftBrace, LeftParen, Less, LessEqual, LoxNil, LoxNumber, LoxString, Minus, Or,
+  Plus, Print, Return, RightBrace, RightParen, Semicolon, Slash, Star, Super,
+  This, Token, TokenFalse, TokenNil, TokenNumber, TokenString, TrueToken, Var,
   While,
 }
 
@@ -73,6 +73,11 @@ fn scan_tokens(
         True, False -> add_number(source, tokens, line)
         False, True -> add_text_based(source, tokens, line)
         False, False -> Error(ScanError("Unexpected character.", line: line))
+        True, True ->
+          Error(ScanError(
+            "720 Unpossible: the same character has tested as both a digit and a letter.",
+            line: line,
+          ))
       }
     }
   }
@@ -196,7 +201,7 @@ fn add_string(
   |> string.split_once("\"")
   |> result.replace_error(ScanError(message: "Unterminated string.", line: line))
   |> result.then(fn(result) {
-    let #(literal, new_source) = result
+    let assert #(literal, new_source) = result
     do_add_string(new_source, tokens, line, literal)
   })
 }
@@ -239,7 +244,7 @@ fn add_number(
 ) -> LoxResult(List(Token)) {
   number_text("", source, line, False)
   |> result.then(fn(result) {
-    let #(text, new_source) = result
+    let assert #(text, new_source) = result
     let assert Ok(value) = float.parse(text)
     let token =
       Token(token_type: TokenNumber, value: LoxNumber(value), line: line)
@@ -330,7 +335,7 @@ fn add_text_based(
 ) -> LoxResult(List(Token)) {
   identifier_text("", source, line)
   |> result.then(fn(result) {
-    let #(text, new_source) = result
+    let assert #(text, new_source) = result
     let token_type = text_to_token_type(text)
     let token =
       Token(token_type: token_type, value: LoxString(text), line: line)
@@ -350,7 +355,7 @@ fn identifier_text(
     line: line,
   ))
   |> result.then(fn(result) {
-    let #(char, new_source) = result
+    let assert #(char, new_source) = result
     case is_alphanumeric(char), new_source {
       // We're done scanning the lexeme
       False, _ -> Ok(#(current, source))

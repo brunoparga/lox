@@ -6,8 +6,8 @@
 //// code from the book ported to Gleam, the statically typed language
 //// running on Erlang's VM.
 
+import argv
 import gleam/erlang
-import gleam/erlang/file
 import gleam/io
 import gleam/option
 import gleam/string
@@ -17,9 +17,10 @@ import lox_gleam/interpreter
 import lox_gleam/parser
 import lox_gleam/scanner
 import lox_gleam/types
+import simplifile
 
 pub fn main() -> error.LoxResult(types.Environment) {
-  case erlang.start_arguments() {
+  case argv.load().arguments {
     [] -> run_prompt()
     [filename] -> run_file(filename)
     _ ->
@@ -55,7 +56,7 @@ fn do_run_prompt(environment: types.Environment) -> types.Environment {
 }
 
 fn run_file(filename: String) -> error.LoxResult(types.Environment) {
-  case file.read(from: filename) {
+  case simplifile.read(from: filename) {
     Ok(contents) -> run(contents, environment.create(option.None))
     Error(error) ->
       Error(error.ErlangError(message: string.inspect(error), line: "0"))
@@ -76,6 +77,6 @@ fn run(
 pub fn run_test(filename: String) -> error.LoxResult(types.Environment) {
   let empty = environment.create(option.None)
   let assert Ok(source) =
-    file.read("../../craftinginterpreters/test/" <> filename)
+    simplifile.read("../../craftinginterpreters/test/" <> filename)
   run(source, empty)
 }

@@ -1,12 +1,12 @@
 //// This module collects all the types in the application.
 
 import gleam/float
-import gleam/map
+import gleam/dict
 import gleam/string
 import gleam/option
 
 pub type Table =
-  map.Map(String, LoxValue)
+  dict.Dict(String, LoxValue)
 
 pub type Environment {
   Global(table: Table)

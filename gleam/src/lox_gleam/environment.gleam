@@ -1,14 +1,14 @@
 //// An environment is a data structure with a reference to its parent
-//// environment and a map that records the value assigned to each
+//// environment and a dict that records the value assigned to each
 //// variable in the current environment.
 
-import gleam/map
+import gleam/dict
 import gleam/option
 import gleam/result
 import lox_gleam/error
 import lox_gleam/types.{
-  Environment, Global, Local, LoxNil, LoxString, LoxValue, NativeFunction,
-  ReturnValue, Table,
+  type Environment, type LoxValue, type Table, Global, Local, LoxNil, LoxString,
+  NativeFunction, ReturnValue,
 }
 
 pub fn assign(
@@ -17,17 +17,19 @@ pub fn assign(
   to name: LoxValue,
   new_value value: LoxValue,
 ) -> error.LoxResult(Environment) {
-  let #(is_global, table) = is_global(environment)
-  case is_global, map.has_key(table, types.read_value(name)) {
+  let assert #(is_global, table) = is_global(environment)
+  case is_global, dict.has_key(table, types.read_value(name)) {
     True, True ->
-      Ok(Global(map.insert(
-        into: table,
-        for: types.read_value(name),
-        insert: value,
-      )))
+      Ok(
+        Global(dict.insert(
+          into: table,
+          for: types.read_value(name),
+          insert: value,
+        )),
+      )
     False, True -> {
       let new_table =
-        map.insert(into: table, for: types.read_value(name), insert: value)
+        dict.insert(into: table, for: types.read_value(name), insert: value)
       let assert Local(parent: parent, ..) = environment
       Ok(Local(parent: parent, table: new_table))
     }
@@ -49,9 +51,9 @@ pub fn assign(
 
 pub fn create(parent: option.Option(Environment)) -> Environment {
   case parent {
-    option.Some(parent_env) -> Local(parent: parent_env, table: map.new())
+    option.Some(parent_env) -> Local(parent: parent_env, table: dict.new())
     option.None ->
-      Global(map.new())
+      Global(dict.new())
       |> add_native_function()
   }
 }
@@ -63,10 +65,14 @@ pub fn define(
 ) -> Environment {
   case environment {
     Global(table: table) ->
-      Global(map.insert(into: table, for: types.read_value(name), insert: value))
+      Global(dict.insert(
+        into: table,
+        for: types.read_value(name),
+        insert: value,
+      ))
     Local(table: table, parent: parent) -> {
       let new_table =
-        map.insert(into: table, for: types.read_value(name), insert: value)
+        dict.insert(into: table, for: types.read_value(name), insert: value)
       Local(parent: parent, table: new_table)
     }
   }
@@ -95,15 +101,15 @@ pub fn get(
   environment: Environment,
   variable: LoxValue,
 ) -> error.LoxResult(#(LoxValue, Environment)) {
-  let #(is_global, table) = is_global(environment)
-  case is_global, map.get(table, types.read_value(variable)) {
+  let assert #(is_global, table) = is_global(environment)
+  case is_global, dict.get(table, types.read_value(variable)) {
     _, Ok(value) -> Ok(#(value, environment))
     False, Error(Nil) -> {
       let assert Local(parent: parent, ..) = environment
       get(line, parent, variable)
       |> result.then(fn(value_and_env) {
         // We don't care where the variable was found
-        let #(value, _irrelevant_env) = value_and_env
+        let assert #(value, _irrelevant_env) = value_and_env
         Ok(#(value, environment))
       })
     }
@@ -138,7 +144,7 @@ pub fn update_parent(closure: Environment, parent: Environment) -> Environment {
 }
 
 pub fn update_values(target: Environment, source: Environment) -> Environment {
-  let new_table = map.merge(target.table, source.table)
+  let new_table = dict.merge(target.table, source.table)
   case target {
     Global(..) -> Global(table: new_table)
     Local(parent: parent, ..) -> Local(parent: parent, table: new_table)
@@ -147,7 +153,7 @@ pub fn update_values(target: Environment, source: Environment) -> Environment {
 
 fn delete_return_value(environment: Environment) -> Environment {
   case environment {
-    Global(table) -> Global(map.delete(table, "ReturnValue"))
+    Global(table) -> Global(dict.delete(table, "ReturnValue"))
     Local(parent: parent, table: table) ->
       Local(parent: delete_return_value(parent), table: table)
   }

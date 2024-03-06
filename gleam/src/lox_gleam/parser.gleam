@@ -2,18 +2,19 @@
 //// returns an abstract syntax tree.
 
 import gleam/list
-import gleam/option.{None, Option, Some}
+import gleam/option.{type Option}
 import gleam/result.{then, try}
 import gleam/string
-import lox_gleam/error.{LoxResult, ParseError}
+import lox_gleam/error.{type LoxResult, ParseError}
 import lox_gleam/types.{
-  And, Assign, Bang, BangEqual, Binary, Block, Call, Class, Comma, Else, Eof,
-  Equal, EqualEqual, Expr, ExprStmt, For, Fun, FunDecl, Greater, GreaterEqual,
-  Grouping, Identifier, If, IfStmt, LeftBrace, LeftParen, Less, LessEqual,
-  Literal, Logical, LoxBool, LoxNil, LoxValue, Minus, Or, Plus, Print, PrintStmt,
-  Return, ReturnStmt, RightBrace, RightParen, Semicolon, Slash, Star, Stmt,
-  Token, TokenFalse, TokenNil, TokenNumber, TokenString, TokenType, TrueToken,
-  Unary, Var, VarDecl, Variable, While, WhileStmt,
+  type Expr, type LoxValue, type Stmt, type Token, type TokenType, And, Assign,
+  Bang, BangEqual, Binary, Block, Call, Class, Comma, Else, Eof, Equal,
+  EqualEqual, ExprStmt, For, Fun, FunDecl, Greater, GreaterEqual, Grouping,
+  Identifier, If, IfStmt, LeftBrace, LeftParen, Less, LessEqual, Literal,
+  Logical, LoxBool, LoxNil, Minus, Or, Plus, Print, PrintStmt, Return,
+  ReturnStmt, RightBrace, RightParen, Semicolon, Slash, Star, Token, TokenFalse,
+  TokenNil, TokenNumber, TokenString, TrueToken, Unary, Var, VarDecl, Variable,
+  While, WhileStmt,
 }
 
 type ExprAndTokens =
@@ -29,7 +30,7 @@ pub fn parse(
   stmts_and_tokens: LoxResult(StmtsAndTokens),
 ) -> LoxResult(List(Stmt)) {
   use #(statements, tokens) <- result.try(stmts_and_tokens)
-  let [Token(line: line, ..), ..] = tokens
+  let assert [Token(line: line, ..), ..] = tokens
   case tokens {
     // I'm not sure how to handle the end here.
     [] | [Token(token_type: Eof, ..)] -> Ok(list.reverse(statements))
@@ -38,9 +39,8 @@ pub fn parse(
       case parsed {
         Ok(#(new_statement, new_tokens)) ->
           parse(Ok(#([new_statement, ..statements], new_tokens)))
-        Error(
-          ParseError(remaining_tokens: option.None, ..) as error
-        ) -> Error(error)
+        Error(ParseError(remaining_tokens: option.None, ..) as error) ->
+          Error(error)
         Error(
           ParseError(remaining_tokens: option.Some(remaining_tokens), ..) as error,
         ) -> {
@@ -48,6 +48,7 @@ pub fn parse(
           use new_tokens <- try(synchronize(remaining_tokens, line))
           parse(Ok(#(statements, new_tokens)))
         }
+        Error(error) -> Error(error)
       }
     }
   }
@@ -68,6 +69,7 @@ fn synchronize(tokens: List(Token), line: String) -> LoxResult(List(Token)) {
         _ -> synchronize([second_token, ..other_tokens], line)
       }
     }
+    [Token(value: value, ..)] -> Error(ParseError(message: "Developer error; I don't know exactly what reaching this case means.", line: line, value: types.LoxNumber(6.28), remaining_tokens: option.Some([])))
   }
 }
 
@@ -86,7 +88,7 @@ fn function_declaration(
   kind: String,
   tokens: List(Token),
 ) -> LoxResult(OneStmtAndTokens) {
-  let [name_token, left_paren, next_token, ..tokens1] = tokens
+  let assert [name_token, left_paren, next_token, ..tokens1] = tokens
   case name_token.token_type, left_paren.token_type, next_token.token_type {
     // No parameters
     Identifier, LeftParen, RightParen -> Ok(#([], tokens1))
@@ -108,7 +110,7 @@ fn function_declaration(
       ))
   }
   |> then(fn(result) {
-    let #(parameters, tokens2) = result
+    let assert #(parameters, tokens2) = result
     let error_message = "Expect '{' before function body."
     use tokens3 <- try(consume(tokens2, LeftBrace, error_message))
     build_fun_declaration(name_token, parameters, tokens3)
@@ -119,7 +121,7 @@ fn build_params(
   params: List(LoxValue),
   tokens: List(Token),
 ) -> LoxResult(#(List(LoxValue), List(Token))) {
-  let [param, comma_or_paren, ..new_tokens] = tokens
+  let assert [param, comma_or_paren, ..new_tokens] = tokens
   case list.length(params) >= 255, param.token_type, comma_or_paren.token_type {
     True, _, _ ->
       Error(ParseError(
@@ -167,7 +169,7 @@ fn build_fun_declaration(
 }
 
 fn variable_declaration(tokens: List(Token)) -> LoxResult(OneStmtAndTokens) {
-  let [first_token, second_token, ..tokens1] = tokens
+  let assert [first_token, second_token, ..tokens1] = tokens
   case first_token, second_token.token_type {
     Token(token_type: Identifier, value: variable_name, ..), Equal ->
       var_declaration_with_assignment(variable_name, tokens1)
@@ -179,7 +181,9 @@ fn variable_declaration(tokens: List(Token)) -> LoxResult(OneStmtAndTokens) {
     }
     Token(token_type: Identifier, value: value, line: line), _ ->
       Error(ParseError(
-        message: "the variable declaration on line " <> line <> " must be followed by ';' or an assignment.",
+        message: "the variable declaration on line "
+          <> line
+          <> " must be followed by ';' or an assignment.",
         line: line,
         value: value,
         remaining_tokens: option.None,
@@ -229,9 +233,9 @@ fn basic_statement(
   tokens: List(Token),
   stmt_type: fn(String, Expr) -> Stmt,
 ) -> LoxResult(OneStmtAndTokens) {
-  let [Token(line: line, ..), ..] = tokens
+  let assert [Token(line: line, ..), ..] = tokens
   use expr_and_tokens <- result.try(expression(tokens))
-  let #(expr, [token, ..new_tokens] as all_tokens) = expr_and_tokens
+  let assert #(expr, [token, ..new_tokens] as all_tokens) = expr_and_tokens
   let statement = stmt_type(line, expr)
   // Consume the semicolon after the expression, or the right paren
   // if this is a for loop incrementer.
@@ -247,11 +251,13 @@ fn block(
   block_statements: List(Stmt),
   tokens: List(Token),
 ) -> LoxResult(OneStmtAndTokens) {
-  let [first_token, ..other_tokens] = tokens
+  let assert [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     Eof ->
       Error(ParseError(
-        message: "unexpected end of file while parsing block on line " <> line <> ".",
+        message: "unexpected end of file while parsing block on line "
+          <> line
+          <> ".",
         line: line,
         value: first_token.value,
         remaining_tokens: option.None,
@@ -262,7 +268,7 @@ fn block(
     }
     _ -> {
       use stmt_and_tokens <- result.try(declaration(Ok(tokens)))
-      let #(statement, new_tokens) = stmt_and_tokens
+      let assert #(statement, new_tokens) = stmt_and_tokens
       block(line, [statement, ..block_statements], new_tokens)
     }
   }
@@ -284,7 +290,7 @@ fn for_statement(
 fn for_stmt_initializer(
   tokens: List(Token),
 ) -> LoxResult(#(Option(Stmt), List(Token))) {
-  let [token, ..other_tokens] = tokens
+  let assert [token, ..other_tokens] = tokens
   case token.token_type {
     Semicolon -> Ok(#(option.None, other_tokens))
     Var ->
@@ -299,14 +305,14 @@ fn for_stmt_initializer(
 fn wrap_in_option(
   previous_result: OneStmtAndTokens,
 ) -> LoxResult(#(Option(Stmt), List(Token))) {
-  let #(statement, tokens) = previous_result
+  let assert #(statement, tokens) = previous_result
   Ok(#(option.Some(statement), tokens))
 }
 
 fn for_stmt_condition(
   previous_result: #(Option(Stmt), List(Token)),
 ) -> LoxResult(#(Option(Stmt), Expr, List(Token))) {
-  let #(
+  let assert #(
     initializer_stmt,
     [Token(line: line, token_type: token_type, ..), ..other_tokens] as tokens,
   ) = previous_result
@@ -320,7 +326,7 @@ fn for_stmt_condition(
     }
   }
   |> result.then(fn(condition_and_tokens) {
-    let #(for_condition, new_tokens) = condition_and_tokens
+    let assert #(for_condition, new_tokens) = condition_and_tokens
     Ok(#(initializer_stmt, for_condition, new_tokens))
   })
 }
@@ -328,15 +334,18 @@ fn for_stmt_condition(
 fn for_stmt_increment(
   previous_result: #(Option(Stmt), Expr, List(Token)),
 ) -> LoxResult(#(Option(Stmt), Expr, Option(Expr), List(Token))) {
-  let #(initializer_stmt, for_condition, [token, ..other_tokens] as tokens) =
-    previous_result
+  let assert #(
+    initializer_stmt,
+    for_condition,
+    [token, ..other_tokens] as tokens,
+  ) = previous_result
   case token.token_type {
     RightParen -> Ok(#(option.None, other_tokens))
     _ ->
       tokens
       |> expression()
       |> result.then(fn(result) {
-        let #(expr, tokens1) = result
+        let assert #(expr, tokens1) = result
         use tokens2 <- try(consume(
           tokens1,
           RightParen,
@@ -346,7 +355,7 @@ fn for_stmt_increment(
       })
   }
   |> result.map(fn(increment_and_tokens) {
-    let #(increment_expr, other_tokens) = increment_and_tokens
+    let assert #(increment_expr, other_tokens) = increment_and_tokens
     #(initializer_stmt, for_condition, increment_expr, other_tokens)
   })
 }
@@ -354,11 +363,11 @@ fn for_stmt_increment(
 fn for_stmt_body(
   previous_result: #(Option(Stmt), Expr, Option(Expr), List(Token)),
 ) -> LoxResult(#(Option(Stmt), Expr, Option(Expr), Stmt, List(Token))) {
-  let #(initializer_stmt, for_condition, increment_expr, tokens) =
+  let assert #(initializer_stmt, for_condition, increment_expr, tokens) =
     previous_result
   statement(Ok(tokens))
   |> result.map(fn(stmt_and_tokens) {
-    let #(body, other_tokens) = stmt_and_tokens
+    let assert #(body, other_tokens) = stmt_and_tokens
     #(initializer_stmt, for_condition, increment_expr, body, other_tokens)
   })
 }
@@ -367,7 +376,7 @@ fn desugar_into_while(
   result: #(Option(Stmt), Expr, Option(Expr), Stmt, List(Token)),
   line: String,
 ) -> LoxResult(OneStmtAndTokens) {
-  let #(init_stmt, condition_expr, increment_expr, body, tokens) = result
+  let assert #(init_stmt, condition_expr, increment_expr, body, tokens) = result
   let body1 = body_with_increment(increment_expr, body)
   let while_stmt = WhileStmt(condition: condition_expr, body: body1, line: line)
   let final_while = case init_stmt {
@@ -398,7 +407,7 @@ fn if_statement(
   consume(tokens, LeftParen, "expect '(' after 'if'.")
   |> then(expression)
   |> then(fn(condition_and_tokens) {
-    let #(condition, tokens1) = condition_and_tokens
+    let assert #(condition, tokens1) = condition_and_tokens
     consume(tokens1, RightParen, "expect ')' after if condition.")
     |> then(fn(tokens2) { do_if_statement(line, condition, tokens2) })
   })
@@ -444,7 +453,7 @@ fn if_then_else(
 }
 
 fn return_statement(tokens: List(Token)) -> LoxResult(OneStmtAndTokens) {
-  let [maybe_semicolon, ..new_tokens] = tokens
+  let assert [maybe_semicolon, ..new_tokens] = tokens
   case maybe_semicolon.token_type {
     Semicolon -> {
       let nil_return_value = Literal(LoxNil, line: maybe_semicolon.line)
@@ -478,7 +487,7 @@ fn do_while_statement(
   condition: Expr,
   tokens: List(Token),
 ) -> LoxResult(OneStmtAndTokens) {
-  let [Token(value: value, ..), ..] = tokens
+  let assert [Token(value: value, ..), ..] = tokens
   statement(Ok(tokens))
   |> result.replace_error(ParseError(
     message: "expected statement as 'while' loop body.",
@@ -487,7 +496,7 @@ fn do_while_statement(
     remaining_tokens: option.None,
   ))
   |> result.then(fn(body_and_tokens) {
-    let #(body, new_tokens) = body_and_tokens
+    let assert #(body, new_tokens) = body_and_tokens
     let while_stmt =
       WhileStmt(condition: condition, body: body, line: condition.line)
     Ok(#(while_stmt, new_tokens))
@@ -499,19 +508,19 @@ fn expression(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 }
 
 fn assignment(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
-  let [Token(value: value, ..), ..] = tokens
+  let assert [Token(value: value, ..), ..] = tokens
   tokens
   |> or()
   |> then(fn(result) {
     case result {
       #(name_expr, []) ->
         Error(ParseError(
-          message: "unexpected end of tokens when assigning variable" <> string.inspect(
-            name_expr,
-          ) <> ".",
+          message: "unexpected end of tokens when assigning variable"
+            <> string.inspect(name_expr)
+            <> ".",
           line: name_expr.line,
           value: value,
-        remaining_tokens: option.None,
+          remaining_tokens: option.None,
         ))
       #(name_expr, new_tokens) -> do_assignment(name_expr, new_tokens)
     }
@@ -522,7 +531,7 @@ fn do_assignment(
   name_expr: Expr,
   tokens: List(Token),
 ) -> LoxResult(ExprAndTokens) {
-  let [equals, ..] = tokens
+  let assert [equals, ..] = tokens
   case equals.token_type {
     Equal -> do_valid_assignment(name_expr, tokens)
     _ -> Ok(#(name_expr, tokens))
@@ -530,11 +539,11 @@ fn do_assignment(
 }
 
 fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
-  let [Token(value: value, ..), ..tokens1] = tokens
+  let assert [Token(value: value, ..), ..tokens1] = tokens
   tokens1
   |> assignment()
   |> then(fn(result) {
-    let #(value_expr, new_tokens) = result
+    let assert #(value_expr, new_tokens) = result
     case name_expr {
       Variable(name: name, line: line) ->
         Ok(#(Assign(name: name, value: value_expr, line: line), new_tokens))
@@ -543,7 +552,7 @@ fn do_valid_assignment(name_expr: Expr, tokens: List(Token)) {
           message: "Invalid assignment target.",
           line: value_expr.line,
           value: value,
-        remaining_tokens: option.None,
+          remaining_tokens: option.None,
         ))
     }
   })
@@ -586,7 +595,7 @@ fn factor(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 }
 
 fn unary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
-  let [first_token, ..tokens1] = tokens
+  let assert [first_token, ..tokens1] = tokens
   case match(first_token, [Bang, Minus]) {
     True -> do_unary(first_token, tokens1)
     False -> call(tokens)
@@ -597,7 +606,7 @@ fn do_unary(first_token: Token, tokens: List(Token)) -> LoxResult(ExprAndTokens)
   tokens
   |> unary()
   |> then(fn(result) {
-    let #(right, new_tokens) = result
+    let assert #(right, new_tokens) = result
     let Token(line: line, token_type: token_type, ..) = first_token
     let unary_expr = Unary(operator: token_type, right: right, line: line)
     Ok(#(unary_expr, new_tokens))
@@ -613,7 +622,8 @@ fn call(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
     // just return it up the recursive expression evaluation chain.
     // If it has a left paren, it must be an identifier for something
     // that is callable, so we run `finish_call`.
-    let #(callee, [left_paren, ..remaining_tokens] as new_tokens) = result
+    let assert #(callee, [left_paren, ..remaining_tokens] as new_tokens) =
+      result
     case left_paren.token_type {
       LeftParen -> finish_call(callee, remaining_tokens)
       _ -> Ok(#(callee, new_tokens))
@@ -622,13 +632,13 @@ fn call(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
 }
 
 fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
-  let [right_paren, ..other_tokens] = tokens
+  let assert [right_paren, ..other_tokens] = tokens
   case right_paren.token_type {
     RightParen -> Ok(#([], right_paren, other_tokens))
     _ -> build_arguments([], tokens)
   }
   |> then(fn(result) {
-    let #(arguments, closing_paren, [left_paren, ..new_tokens]) = result
+    let assert #(arguments, closing_paren, [left_paren, ..new_tokens]) = result
     case list.length(arguments) {
       n if n >= 255 -> {
         // for error reporting, we need the token *before* the closing paren.
@@ -640,7 +650,7 @@ fn finish_call(callee: Expr, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
           message: "Can't have more than 255 arguments.",
           line: error_token.line,
           value: error_token.value,
-        remaining_tokens: option.None,
+          remaining_tokens: option.None,
         ))
       }
       _ -> {
@@ -665,7 +675,7 @@ fn build_arguments(
   tokens
   |> expression()
   |> then(fn(result) {
-    let #(argument, [comma_or_paren, ..new_tokens]) = result
+    let assert #(argument, [comma_or_paren, ..new_tokens]) = result
     case comma_or_paren.token_type {
       RightParen -> Ok(#([argument, ..arguments], comma_or_paren, new_tokens))
       Comma -> build_arguments([argument, ..arguments], new_tokens)
@@ -681,7 +691,7 @@ fn build_arguments(
 }
 
 fn primary(tokens: List(Token)) -> LoxResult(ExprAndTokens) {
-  let [first_token, ..other_tokens] = tokens
+  let assert [first_token, ..other_tokens] = tokens
   case first_token.token_type {
     TokenFalse ->
       Ok(#(Literal(value: LoxBool(False), line: first_token.line), other_tokens))
@@ -715,7 +725,7 @@ fn do_grouping(line: String, tokens: List(Token)) -> LoxResult(ExprAndTokens) {
   tokens
   |> expression()
   |> then(fn(result) {
-    let #(inner_expr, tokens1) = result
+    let assert #(inner_expr, tokens1) = result
     consume(tokens1, RightParen, "unmatched '('.")
     |> result.map(fn(tokens2) {
       let expr = Grouping(expression: inner_expr, line: line)
@@ -733,7 +743,7 @@ fn consume(
   token_type: TokenType,
   message: String,
 ) -> LoxResult(List(Token)) {
-  let [first_token, ..tokens1] = tokens
+  let assert [first_token, ..tokens1] = tokens
   case first_token.token_type == token_type {
     True -> Ok(tokens1)
     False ->
@@ -758,7 +768,7 @@ fn binary_inner(
   fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
     expr_and_tokens
     |> then(fn(result) {
-      let #(expr, tokens) = result
+      let assert #(expr, tokens) = result
       happy_path(token_types, function, expr_type)(expr, tokens)
     })
   }
@@ -768,7 +778,7 @@ fn binary_inner(
 //  fn(expr_and_tokens) -> LoxResult(ExprAndTokens) {
 //    expr_and_tokens
 //    |> then(fn(result) {
-//      let #(expr, tokens) = result
+//      let assert #(expr, tokens) = result
 //      happy_path([Slash, Star], unary, Binary)(expr, tokens)
 //  })
 //  }
@@ -776,7 +786,7 @@ fn binary_inner(
 //  `happy_path` is called with the same arguments as `binary_inner`.
 //  It expands to:
 //  fn(expr, tokens) -> LoxResult(ExprAndTokens) {
-//    let [first_token, ..other_tokens] = tokens
+//    let assert [first_token, ..other_tokens] = tokens
 //    case match(first_token, [Slash, Star]) {
 //      True ->
 //        build_binary(
@@ -796,7 +806,7 @@ fn binary_inner(
 //  other_tokens
 //  |> unary
 //  |> then(fn(result) {
-//    let #(right, tokens2) = result
+//    let assert #(right, tokens2) = result
 //    let Token(line: line, token_type: token_type, ..) = first_token
 //    let binary = Binary(line, token_type, left, right)
 //    binary_inner([Slash, Star], unary, Binary)(Ok(THIS_BINARY, tokens2))
@@ -809,14 +819,14 @@ fn binary_inner(
 //  fn(THIS_BINARY_and_tokens2) -> LoxResult(ExprAndTokens) {
 //    THIS_BINARY_and_tokens2
 //    |> then(fn(result) {
-//      let #(THIS_BINARY, tokens2) = result
+//      let assert #(THIS_BINARY, tokens2) = result
 //      happy_path([Slash, Star], unary, Binary)(THIS_BINARY, tokens2)
 //    })
 //  }
 
 //  We then evaluate the function that happy_path returns...
 //  fn(THIS_BINARY, tokens2) -> LoxResult(ExprAndTokens) {
-//    let [first_token, ..other_tokens] = tokens2
+//    let assert [first_token, ..other_tokens] = tokens2
 //    case match(first_token, [Slash, Star]) {
 //      True ->
 //        build_binary(
@@ -840,7 +850,7 @@ fn happy_path(
   expr_type: fn(String, TokenType, Expr, Expr) -> Expr,
 ) -> fn(Expr, List(Token)) -> LoxResult(ExprAndTokens) {
   fn(expr, tokens) {
-    let [first_token, ..other_tokens] = tokens
+    let assert [first_token, ..other_tokens] = tokens
     case match(first_token, token_types) {
       True ->
         build_binary(
@@ -867,7 +877,7 @@ fn build_binary(
   other_tokens
   |> function()
   |> then(fn(result) {
-    let #(right, tokens2) = result
+    let assert #(right, tokens2) = result
     let Token(line: line, token_type: token_type, ..) = first_token
     let binary = expr_type(line, token_type, left, right)
     binary_inner(token_types, function, expr_type)(Ok(#(binary, tokens2)))

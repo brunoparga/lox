@@ -3,7 +3,7 @@
 
 import gleam/erlang/atom
 import gleam/option
-import lox_gleam/types.{LoxValue, Token}
+import lox_gleam/types.{type LoxValue, type Token}
 
 // See this return type? It is a brazen, shameless lie.
 @external(erlang, "erlang", "halt")
@@ -30,13 +30,15 @@ pub type LoxResult(t) =
 
 pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
   let exit_code = case result {
-    Error(ErlangError(..)) -> 0
+    Error(ErlangError(..)) -> 1
     Error(ParseError(..)) -> 65
     Error(RuntimeError(..)) -> 70
     Error(ScanError(..)) -> 65
-    Error(TooManyArgumentsError(..)) -> 0
+    Error(TooManyArgumentsError(..)) -> 1
     _ -> 0
   }
+
+  let standard_error = atom.create_from_string("standard_error")
 
   case result {
     Ok(_) -> result
@@ -45,18 +47,16 @@ pub fn report_error(result: LoxResult(a)) -> LoxResult(a) {
       halt(exit_code)
     }
     Error(ScanError(message: message, line: line)) -> {
-      stderr(
-        atom.create_from_string("standard_error"),
-        "[line " <> line <> "] Error: " <> message <> "\n",
-      )
+      // TODO: make a function that takes a list of strings and stderrs
+      // them all
+      stderr(standard_error, "[line " <> line <> "] Error: " <> message <> "\n")
       halt(exit_code)
     }
-    Error(RuntimeError(message: message, line: line)) -> {
-      stderr(atom.create_from_string("standard_error"), message)
-      stderr(
-        atom.create_from_string("standard_error"),
-        "\n[line " <> line <> "]\n",
-      )
+    Error(RuntimeError(message: message, line: line))
+    | Error(ErlangError(message: message, line: line))
+    | Error(TooManyArgumentsError(message: message, line: line)) -> {
+      stderr(standard_error, message)
+      stderr(standard_error, "\n[line " <> line <> "]\n")
       halt(exit_code)
     }
   }
@@ -74,6 +74,12 @@ fn print_parse_error(error: LoxError) -> Nil {
   let assert ParseError(message: message, line: line, value: value, ..) = error
   stderr(
     atom.create_from_string("standard_error"),
-    "[line " <> line <> "] Error at '" <> types.read_value(value) <> "': " <> message <> "\n",
+    "[line "
+      <> line
+      <> "] Error at '"
+      <> types.read_value(value)
+      <> "': "
+      <> message
+      <> "\n",
   )
 }
