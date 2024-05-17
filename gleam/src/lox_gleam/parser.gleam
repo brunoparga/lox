@@ -69,7 +69,7 @@ fn synchronize(tokens: List(Token), line: String) -> LoxResult(List(Token)) {
         _ -> synchronize([second_token, ..other_tokens], line)
       }
     }
-    [Token(value: value, ..)] -> Error(ParseError(message: "Developer error; I don't know exactly what reaching this case means.", line: line, value: types.LoxNumber(6.28), remaining_tokens: option.Some([])))
+    [Token(value: value, ..)] -> Error(ParseError(message: "Developer error; I don't know exactly what reaching this case means.", line: line, value: value, remaining_tokens: option.Some([])))
   }
 }
 
